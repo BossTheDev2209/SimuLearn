@@ -1,35 +1,122 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect, useCallback } from 'react';
+import LoadingSimulation from './components/LoadingSimulation';
+import Sidebar from './components/Sidebar';
+import PhysicsBoard from './components/PhysicsBoard';
+import ChatArea from './components/ChatArea';
+import SearchModal from './components/SearchModal';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+
+  // Simulation history & active simulation
+  const [simulations, setSimulations] = useState([]);
+  const [activeSimId, setActiveSimId] = useState(null);
+
+  const activeSim = simulations.find((s) => s.id === activeSimId) || null;
+
+  const handleSend = async (text) => {
+    // Create a new simulation entry
+    const newSim = {
+      id: Date.now(),
+      title: text,
+      createdAt: new Date(),
+      data: null,
+    };
+    setSimulations((prev) => [newSim, ...prev]);
+    setActiveSimId(newSim.id);
+    setIsLoading(true);
+    setMessages((prev) => [...prev, { sender: 'user', text }]);
+
+    try {
+      const res = await fetch('http://localhost:5000/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text }),
+      });
+      const data = await res.json();
+      // Update simulation entry with returned data
+      setSimulations((prev) =>
+        prev.map((s) => (s.id === newSim.id ? { ...s, data } : s))
+      );
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Reset to home / new simulation prompt
+  const handleNewSimulation = useCallback(() => {
+    setActiveSimId(null);
+    setMessages([]);
+    setIsInteracting(false);
+  }, []);
+
+  const handleSelectSimulation = useCallback((id) => {
+    setActiveSimId(id);
+    setIsSearchOpen(false);
+  }, []);
+
+  const handleDeleteSimulation = useCallback(
+    (id) => {
+      setSimulations((prev) => prev.filter((s) => s.id !== id));
+      if (activeSimId === id) {
+        setActiveSimId(null);
+        setMessages([]);
+      }
+    },
+    [activeSimId]
+  );
+
+  const handleOpenSearch = useCallback(() => setIsSearchOpen(true), []);
+  const handleCloseSearch = useCallback(() => setIsSearchOpen(false), []);
+
+  // Ctrl+K keyboard shortcut to open search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="app-container relative flex w-full h-screen bg-[#FAF9F6] font-chakra text-gray-800 overflow-hidden">
+      {isLoading && <LoadingSimulation />}
+      <Sidebar
+        simulations={simulations}
+        activeSimId={activeSimId}
+        onNewSimulation={handleNewSimulation}
+        onSelectSimulation={handleSelectSimulation}
+        onDeleteSimulation={handleDeleteSimulation}
+        onSearchClick={handleOpenSearch}
+        onHomeClick={handleNewSimulation}
+      />
+      <div className="flex-1 relative w-full h-full flex flex-col">
+        <PhysicsBoard activeSim={activeSim} isInteracting={isInteracting} />
+        {!activeSim && (
+          <ChatArea
+            messages={messages}
+            onSendMessage={handleSend}
+            setIsInteracting={setIsInteracting}
+          />
+        )}
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+      <SearchModal
+        isOpen={isSearchOpen}
+        onClose={handleCloseSearch}
+        simulations={simulations}
+        onNewSimulation={() => { handleCloseSearch(); handleNewSimulation(); }}
+        onSelectSimulation={handleSelectSimulation}
+      />
+    </div>
+  );
 }
 
-export default App
+export default App;
