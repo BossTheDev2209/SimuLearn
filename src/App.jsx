@@ -18,7 +18,7 @@ function App() {
   const activeSim = simulations.find((s) => s.id === activeSimId) || null;
 
   const handleSend = async (text) => {
-    // Create a new simulation entry
+    // Create new simulation
     const newSim = {
       id: Date.now(),
       title: text,
@@ -37,7 +37,7 @@ function App() {
         body: JSON.stringify({ prompt: text }),
       });
       const data = await res.json();
-      // Update simulation entry with returned data
+      // Update simulation with returned data
       setSimulations((prev) =>
         prev.map((s) => (s.id === newSim.id ? { ...s, data } : s))
       );
@@ -74,7 +74,7 @@ function App() {
   const handleOpenSearch = useCallback(() => setIsSearchOpen(true), []);
   const handleCloseSearch = useCallback(() => setIsSearchOpen(false), []);
 
-  // Ctrl+K keyboard shortcut to open search
+  // Ctrl+K to open search
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {

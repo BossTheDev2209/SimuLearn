@@ -62,7 +62,7 @@ export default function PhysicsBoard({ activeSim, isInteracting }) {
             {/* Future Matter.js canvas will be layered here */}
             <div className="absolute inset-0 flex items-center justify-center">
               <p className="text-gray-400 text-[14px] font-medium bg-white/80 px-4 py-2 rounded-lg">
-                Matter.js Canvas — รอการติดตั้ง
+                Matter.js canvas RAH
               </p>
             </div>
           </div>

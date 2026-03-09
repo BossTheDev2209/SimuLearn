@@ -5,7 +5,7 @@ export default function SearchModal({ isOpen, onClose, simulations, onNewSimulat
   const [query, setQuery] = useState('');
   const inputRef = useRef(null);
 
-  // Auto-focus เมื่อเปิด Modal
+  // Auto-focus
   useEffect(() => {
     let timer;
     if (isOpen && inputRef.current) {
@@ -15,7 +15,7 @@ export default function SearchModal({ isOpen, onClose, simulations, onNewSimulat
     return () => clearTimeout(timer);
   }, [isOpen]);
 
-  // ปิดด้วยปุ่ม Escape
+  // close with esc
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();

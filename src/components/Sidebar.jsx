@@ -94,7 +94,7 @@ export default function Sidebar({ simulations, activeSimId, onNewSimulation, onS
                     >
                       <span className="truncate flex-1 mr-1">{sim.title}</span>
 
-                      {/* Ellipsis Button */}
+                      {/*Ellipsis Button*/}
                       <button
                         onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === index ? null : index); }}
                         className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all cursor-pointer ${
@@ -106,7 +106,7 @@ export default function Sidebar({ simulations, activeSimId, onNewSimulation, onS
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                       </button>
 
-                      {/* Dropdown Context Menu */}
+                      {/*Dropdown Context Menu*/}
                       {activeMenu === index && (
                         <div className="absolute right-0 top-full mt-1 w-[170px] bg-[#2A2A2A] rounded-xl shadow-xl z-50 py-1.5 text-[13px] font-medium overflow-hidden">
                           <button className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-200 hover:bg-white/10 transition-colors cursor-pointer">
