@@ -71,6 +71,20 @@ function App() {
     [activeSimId]
   );
 
+  const handleRenameSimulation = useCallback((id, newTitle) => {
+    if (!newTitle.trim()) return;
+    setSimulations((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, title: newTitle.trim() } : s))
+    );
+  }, []);
+
+  const handleShareSimulation = useCallback((id) => {
+    const sim = simulations.find((s) => s.id === id);
+    if (!sim) return;
+    const shareText = `SimuLearn — ${sim.title}\n${window.location.origin}/?sim=${sim.id}`;
+    navigator.clipboard.writeText(shareText).catch(() => {});
+  }, [simulations]);
+
   const handleOpenSearch = useCallback(() => setIsSearchOpen(true), []);
   const handleCloseSearch = useCallback(() => setIsSearchOpen(false), []);
 
@@ -95,6 +109,8 @@ function App() {
         onNewSimulation={handleNewSimulation}
         onSelectSimulation={handleSelectSimulation}
         onDeleteSimulation={handleDeleteSimulation}
+        onRenameSimulation={handleRenameSimulation}
+        onShareSimulation={handleShareSimulation}
         onSearchClick={handleOpenSearch}
         onHomeClick={handleNewSimulation}
       />

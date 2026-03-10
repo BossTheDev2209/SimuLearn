@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import logoImg from '../assets/Stylized Atomic Structure Logo-Photoroom.png';
 
-export default function Sidebar({ simulations, activeSimId, onNewSimulation, onSelectSimulation, onDeleteSimulation, onHomeClick, onSearchClick }) {
+export default function Sidebar({ simulations, activeSimId, onNewSimulation, onSelectSimulation, onDeleteSimulation, onRenameSimulation, onShareSimulation, onHomeClick, onSearchClick }) {
   const [isOpen, setIsOpen] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [toastMessage, setToastMessage] = useState(null);
   const menuRef = useRef(null);
+  const renameInputRef = useRef(null);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -17,6 +21,47 @@ export default function Sidebar({ simulations, activeSimId, onNewSimulation, onS
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Auto-focus rename input
+  useEffect(() => {
+    if (renamingId !== null && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingId]);
+
+  // Toast auto-dismiss
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  const handleStartRename = (sim) => {
+    setRenamingId(sim.id);
+    setRenameValue(sim.title);
+    setActiveMenu(null);
+  };
+
+  const handleConfirmRename = () => {
+    if (renamingId !== null && renameValue.trim()) {
+      onRenameSimulation(renamingId, renameValue);
+    }
+    setRenamingId(null);
+    setRenameValue('');
+  };
+
+  const handleCancelRename = () => {
+    setRenamingId(null);
+    setRenameValue('');
+  };
+
+  const handleShare = (sim) => {
+    onShareSimulation(sim.id);
+    setActiveMenu(null);
+    setToastMessage('คัดลอกลิงก์แล้ว!');
+  };
 
   return (
     <div className={`${isOpen ? 'w-[240px]' : 'w-[64px]'} bg-[#EBE5DD] flex flex-col justify-between border-r border-[#DCD5CB] h-full z-10 transition-all duration-300 flex-shrink-0`}>
@@ -83,7 +128,7 @@ export default function Sidebar({ simulations, activeSimId, onNewSimulation, onS
                   simulations.map((sim, index) => (
                     <li
                       key={sim.id}
-                      onClick={() => onSelectSimulation(sim.id)}
+                      onClick={() => { if (renamingId !== sim.id) onSelectSimulation(sim.id); }}
                       className={`group/item relative cursor-pointer rounded-lg px-2 py-2 transition-colors duration-200 flex items-center justify-between ${
                         activeSimId === sim.id
                           ? 'bg-[#D5CBBD] text-black font-bold'
@@ -92,35 +137,59 @@ export default function Sidebar({ simulations, activeSimId, onNewSimulation, onS
                           : 'hover:bg-[#DCD5CB] hover:text-black'
                       }`}
                     >
-                      <span className="truncate flex-1 mr-1">{sim.title}</span>
+                      {renamingId === sim.id ? (
+                        <input
+                          ref={renameInputRef}
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleConfirmRename();
+                            if (e.key === 'Escape') handleCancelRename();
+                          }}
+                          onBlur={handleConfirmRename}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 mr-1 bg-white/80 text-black text-[14px] font-medium rounded px-1.5 py-0.5 outline-none border border-[#D3A068]/50 focus:border-[#D3A068]"
+                        />
+                      ) : (
+                        <span className="truncate flex-1 mr-1">{sim.title}</span>
+                      )}
 
                       {/*Ellipsis Button*/}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === index ? null : index); }}
-                        className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all cursor-pointer ${
-                          activeMenu === index
-                            ? 'opacity-100 bg-black/10 text-gray-800'
-                            : 'opacity-0 group-hover/item:opacity-100 hover:bg-black/10 text-gray-500 hover:text-gray-800'
-                        }`}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-                      </button>
+                      {renamingId !== sim.id && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === index ? null : index); }}
+                          className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all cursor-pointer ${
+                            activeMenu === index
+                              ? 'opacity-100 bg-black/10 text-gray-800'
+                              : 'opacity-0 group-hover/item:opacity-100 hover:bg-black/10 text-gray-500 hover:text-gray-800'
+                          }`}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                        </button>
+                      )}
 
                       {/*Dropdown Context Menu*/}
                       {activeMenu === index && (
-                        <div className="absolute right-0 top-full mt-1 w-[170px] bg-[#2A2A2A] rounded-xl shadow-xl z-50 py-1.5 text-[13px] font-medium overflow-hidden">
-                          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-200 hover:bg-white/10 transition-colors cursor-pointer">
+                        <div className="absolute right-0 top-full mt-1 w-[170px] bg-[#FAF6F0] border border-[#DCD5CB] rounded-xl shadow-xl z-50 py-1.5 text-[13px] font-medium overflow-hidden">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleShare(sim); }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-[#EBE5DD] transition-colors cursor-pointer"
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></svg>
                             <span>แชร์</span>
                           </button>
-                          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-200 hover:bg-white/10 transition-colors cursor-pointer">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleStartRename(sim); }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-[#EBE5DD] transition-colors cursor-pointer"
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
                             <span>เปลี่ยนชื่อ</span>
                           </button>
-                          <div className="my-1 mx-3 border-t border-white/10"></div>
+                          <div className="my-1 mx-3 border-t border-[#DCD5CB]"></div>
                           <button
                             onClick={(e) => { e.stopPropagation(); onDeleteSimulation(sim.id); setActiveMenu(null); }}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-red-400 hover:bg-red-500/15 transition-colors cursor-pointer"
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             <span>ลบประวัติ</span>
@@ -135,6 +204,13 @@ export default function Sidebar({ simulations, activeSimId, onNewSimulation, onS
           </div>
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-20 bg-[#FAF6F0] border border-[#DCD5CB] text-gray-800 text-[13px] font-medium px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in whitespace-nowrap">
+          {toastMessage}
+        </div>
+      )}
 
       {/*UserProfile*/}
       <div className={`p-4 flex items-center ${isOpen ? 'gap-3 border-t border-[#DCD5CB]/50' : 'justify-center border-t border-[#DCD5CB]/50 pt-4 mb-2'} shrink-0`}>

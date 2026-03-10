@@ -9,3 +9,43 @@
   background-color: #DCD5CB;
   border-radius: 4px;
 }
+
+/* ── Control Panel slider ────────────────────────── */
+.control-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: #DCD5CB;
+  outline: none;
+  cursor: pointer;
+}
+.control-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #F0A03E;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.control-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.control-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #F0A03E;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  cursor: pointer;
+}
+.control-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #DCD5CB;
+}
