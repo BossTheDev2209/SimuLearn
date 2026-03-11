@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from './firebase'; 
-import { collection, query, where, getDocs, orderBy, doc, deleteDoc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, deleteDoc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import LoadingSimulation from './components/LoadingSimulation';
 import Sidebar from './components/Sidebar';
 import PhysicsBoard from './components/PhysicsBoard';
 import ChatArea from './components/ChatArea';
 import SearchModal from './components/SearchModal';
+import SettingsModal from './components/SettingsModal';
 import LoginPage from './LoginPage';
 
 function App() {
@@ -15,15 +16,18 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   
   const [simulations, setSimulations] = useState([]);
   const [activeSimId, setActiveSimId] = useState(null);
+  const [userPreferences, setUserPreferences] = useState({ theme: 'light', lang: 'th' });
 
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchData = async () => {
       if (!myUserId) return;
       
+      // Fetch History
       try {
         const q = query(
           collection(db, "simulations"), 
@@ -41,10 +45,45 @@ function App() {
       } catch (err) {
         console.error("โหลดประวัติไม่ขึ้น", err);
       }
+
+      // Fetch Preferences
+      if (!myUserId.startsWith("guest_")) {
+        try {
+          const docRef = doc(db, "users", myUserId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().settings) {
+            setUserPreferences(docSnap.data().settings);
+          }
+        } catch(e) { console.error("โหลดการตั้งค่าไม่ขึ้น", e) }
+      } else {
+         const localTheme = localStorage.getItem("theme") || 'light';
+         const localLang = localStorage.getItem("lang") || 'th';
+         setUserPreferences({ theme: localTheme, lang: localLang });
+      }
     };
 
-    fetchHistory();
+    fetchData();
   }, [myUserId]);
+
+  const handleSaveSettings = async (newTheme, newLang) => {
+    const newSettings = { theme: newTheme, lang: newLang };
+    setUserPreferences(newSettings);
+    setIsSettingsOpen(false);
+
+    if (myUserId && !myUserId.startsWith("guest_")) {
+      try {
+        await setDoc(doc(db, "users", myUserId), {
+          settings: newSettings,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (err) {
+        console.error("บันทึกการตั้งค่าไม่สำเร็จ", err);
+      }
+    } else {
+      localStorage.setItem("theme", newTheme);
+      localStorage.setItem("lang", newLang);
+    }
+  };
 
   const handleLogout = useCallback(() => {
     localStorage.clear(); 
@@ -175,6 +214,7 @@ function App() {
         onRenameSimulation={handleRenameSimulation}
         onShareSimulation={handleShareSimulation}
         onSearchClick={handleOpenSearch}
+        onSettingsClick={() => setIsSettingsOpen(true)}
         onHomeClick={handleNewSimulation}
       />
 
@@ -195,6 +235,12 @@ function App() {
         simulations={simulations}
         onNewSimulation={() => { handleCloseSearch(); handleNewSimulation(); }}
         onSelectSimulation={handleSelectSimulation}
+      />
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)}
+        userPreferences={userPreferences}
+        onSave={handleSaveSettings}
       />
     </div>
   );

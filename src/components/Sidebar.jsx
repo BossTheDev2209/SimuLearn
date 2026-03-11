@@ -11,6 +11,7 @@ export default function Sidebar({
   onShareSimulation, 
   onHomeClick, 
   onSearchClick,
+  onSettingsClick,
   userName,
   onLogout 
 }) {
@@ -20,13 +21,18 @@ export default function Sidebar({
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [toastMessage, setToastMessage] = useState(null);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const renameInputRef = useRef(null);
+  const profileRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setActiveMenu(null);
+      }
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setIsProfileMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -151,16 +157,20 @@ export default function Sidebar({
         </div>
       )}
 
-      <div className={`p-4 flex items-center justify-between ${isOpen ? 'border-t border-[#DCD5CB]/50' : 'justify-center border-t border-[#DCD5CB]/50 pt-4 mb-2'} shrink-0`}>
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 bg-[#FFAA44] border border-[#D3A068]/30 rounded-full flex items-center justify-center text-white shrink-0 font-bold text-xs shadow-sm">
-
+      <div 
+        ref={profileRef}
+        className={`p-4 flex items-center justify-between ${isOpen ? 'border-t border-[#D9CFC7]/50' : 'justify-center border-t border-[#D9CFC7]/50 pt-4 mb-2'} shrink-0 relative`}
+      >
+        <div 
+          onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+          className={`flex items-center gap-3 overflow-hidden cursor-pointer hover:bg-black/5 p-1.5 -ml-1.5 rounded-lg transition-colors w-full ${!isOpen && 'justify-center'}`}
+        >
+          <div className="w-8 h-8 bg-[#FFB65A] border border-[#C59355]/30 rounded-full flex items-center justify-center text-white shrink-0 font-bold text-xs shadow-sm">
             {userName ? userName.charAt(0).toUpperCase() : 'U'}
           </div>
           {isOpen && (
-            <div className="leading-tight overflow-hidden">
-
-              <p className="text-[13px] font-bold text-gray-900 truncate w-24">{userName}</p>
+            <div className="leading-tight overflow-hidden flex-1">
+              <p className="text-[13px] font-bold text-gray-900 truncate">{userName}</p>
               <p className="text-[10px] font-bold text-gray-500 mt-0.5 truncate uppercase tracking-tighter">
                 {userName.includes("Guest") ? "Guest Mode" : "Student"}
               </p>
@@ -168,18 +178,32 @@ export default function Sidebar({
           )}
         </div>
 
-        {isOpen && (
-          <button 
-            onClick={onLogout}
-            title="ออกจากระบบ"
-            className="text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 cursor-pointer"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-          </button>
+        {/* Profile Options Menu */}
+        {isProfileMenuOpen && (
+          <div className={`absolute ${isOpen ? 'left-4 w-[200px]' : 'left-full ml-4 w-[170px]'} bottom-[calc(100%-8px)] bg-[#EFE9E3] border border-[#D9CFC7] rounded-xl shadow-xl z-50 py-1.5 text-[13px] font-medium overflow-hidden`}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsProfileMenuOpen(false); onSettingsClick?.(); }}
+              className="mx-1 w-[calc(100%-8px)] flex items-center gap-3 px-3 py-2.5 text-gray-700 hover:bg-[#D9CFC7] rounded-lg transition-colors cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-settings">
+                <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <span>การตั้งค่า</span>
+            </button>
+            <div className="my-1 mx-3 border-t border-[#D9CFC7]"></div>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsProfileMenuOpen(false); onLogout(); }} 
+              className="mx-1 w-[calc(100%-8px)] flex items-center gap-3 px-3 py-2.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              <span>ออกจากระบบ</span>
+            </button>
+          </div>
         )}
       </div>
     </div>

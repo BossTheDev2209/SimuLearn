@@ -29,7 +29,7 @@ export default function LoadingSimulation() {
   const currentVariant = variants[variantIndex];
 
   return (
-    <div className="fixed inset-0 bg-[#FAF9F6] z-[100] flex flex-col items-center justify-center font-chakra pointer-events-none">
+    <div className="fixed inset-0 bg-[#FAF9F6] z-[100] flex flex-col items-center justify-center font-chakra">
       {/* ส่วนข้อความ: Fade เลื่อนลงมาจากด้านบน แล้วออกด้านล่าง */}
       <div className="h-16 flex items-end justify-center mb-10">
         <AnimatePresence mode="wait">
