@@ -2,11 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+.dark {
+  --bg-theme-sidebar: #37353E;
+  --bg-theme-panel: #37353E;
+  --bg-theme-main: #44444E;
+  --bg-theme-hover: #44444E;
+  --text-theme-primary: #D3DAD9;
+  --text-theme-muted: rgba(211, 218, 217, 0.6); /* #D3DAD9 at 60% opacity */
+  --border-theme-border: #715A5A;
+  --border-theme-border-hover: #715A5A;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #DCD5CB;
+  background-color: #3F4147;
   border-radius: 4px;
 }
 
@@ -16,7 +27,7 @@
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: #DCD5CB;
+  background: #3F4147;
   outline: none;
   cursor: pointer;
 }
@@ -27,8 +38,8 @@
   height: 14px;
   border-radius: 50%;
   background: #F0A03E;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  border: 2px solid #313338;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
   cursor: pointer;
   transition: transform 0.15s ease;
 }
@@ -40,12 +51,12 @@
   height: 14px;
   border-radius: 50%;
   background: #F0A03E;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  border: 2px solid #313338;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
   cursor: pointer;
 }
 .control-slider::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: #DCD5CB;
+  background: #3F4147;
 }

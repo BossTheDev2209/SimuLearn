@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 //อันนี้ผมให้ AI ทำ 100% เลยนะ
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import Matter from 'matter-js';
 import ControlPanel from './ControlPanel';
@@ -28,13 +29,13 @@ function formatLabel(value) {
 // ────────────────────────────────────────────────────
 //  Interactive Grid Component
 // ────────────────────────────────────────────────────
-function InteractiveGrid({ children }) {
+function InteractiveGrid({ children, initialCamera, onCameraChange }) {
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
 
   // Camera state  (offset = how many px the origin has been dragged from the center)
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState(initialCamera?.offset || { x: 0, y: 0 });
+  const [zoom, setZoom] = useState(initialCamera?.zoom || 1);
   const dragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const offsetStart = useRef({ x: 0, y: 0 });
@@ -105,6 +106,10 @@ function InteractiveGrid({ children }) {
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
+  useEffect(() => {
+    if (onCameraChange) onCameraChange({ offset, zoom });
+  }, [offset, zoom, onCameraChange]);
+
   // ── Compute grid parameters ──────────────────────
   const { w, h } = size;
   // Origin in screen pixels
@@ -137,13 +142,13 @@ function InteractiveGrid({ children }) {
       const xPx = ox + i * pxStep;
       // major line
       lines.push(
-        <line key={`vM${i}`} x1={xPx} y1={0} x2={xPx} y2={h} stroke="#D5CBBD" strokeWidth={1} />
+        <line key={`vM${i}`} x1={xPx} y1={0} x2={xPx} y2={h} stroke="#50535C" strokeWidth={1} />
       );
       // sub-grid lines
       for (let s = 1; s < 5; s++) {
         const sx = xPx + s * subStep;
         lines.push(
-          <line key={`vS${i}_${s}`} x1={sx} y1={0} x2={sx} y2={h} stroke="#EDE8E1" strokeWidth={0.5} />
+          <line key={`vS${i}_${s}`} x1={sx} y1={0} x2={sx} y2={h} stroke="#3F4147" strokeWidth={0.5} />
         );
       }
       // label
@@ -157,7 +162,7 @@ function InteractiveGrid({ children }) {
             x={xPx}
             y={labelY}
             textAnchor="middle"
-            fill="#8C8278"
+            fill="#949BA4"
             fontSize={11}
             fontFamily="Inter, system-ui, sans-serif"
             style={{ userSelect: 'none' }}
@@ -176,12 +181,12 @@ function InteractiveGrid({ children }) {
     for (let i = startUnit; i <= endUnit; i++) {
       const yPx = oy + i * pxStep;
       lines.push(
-        <line key={`hM${i}`} x1={0} y1={yPx} x2={w} y2={yPx} stroke="#D5CBBD" strokeWidth={1} />
+        <line key={`hM${i}`} x1={0} y1={yPx} x2={w} y2={yPx} stroke="#50535C" strokeWidth={1} />
       );
       for (let s = 1; s < 5; s++) {
         const sy = yPx + s * subStep;
         lines.push(
-          <line key={`hS${i}_${s}`} x1={0} y1={sy} x2={w} y2={sy} stroke="#EDE8E1" strokeWidth={0.5} />
+          <line key={`hS${i}_${s}`} x1={0} y1={sy} x2={w} y2={sy} stroke="#3F4147" strokeWidth={0.5} />
         );
       }
       const unitVal = -i * unitStep; // invert because screen Y goes down
@@ -193,7 +198,7 @@ function InteractiveGrid({ children }) {
             x={labelX}
             y={yPx + 4}
             textAnchor="start"
-            fill="#8C8278"
+            fill="#949BA4"
             fontSize={11}
             fontFamily="Inter, system-ui, sans-serif"
             style={{ userSelect: 'none' }}
@@ -230,12 +235,12 @@ function InteractiveGrid({ children }) {
         {lines}
 
         {/* X axis (horizontal - ground) */}
-        <line x1={0} y1={axisXY} x2={w} y2={axisXY} stroke="#9B8E7E" strokeWidth={4} />
+        <line x1={0} y1={axisXY} x2={w} y2={axisXY} stroke="#B5BAC1" strokeWidth={4} />
         {/* Y axis (vertical) */}
-        <line x1={axisYX} y1={0} x2={axisYX} y2={h} stroke="#9B8E7E" strokeWidth={1.8} />
+        <line x1={axisYX} y1={0} x2={axisYX} y2={h} stroke="#B5BAC1" strokeWidth={1.8} />
 
         {/* Origin dot */}
-        <circle cx={ox} cy={oy} r={3.5} fill="#9B8E7E" />
+        <circle cx={ox} cy={oy} r={3.5} fill="#B5BAC1" />
 
         {/* Tick marks on X axis */}
         {(() => {
@@ -246,7 +251,7 @@ function InteractiveGrid({ children }) {
             if (Math.abs(i * unitStep) < 1e-10) continue;
             const xPx = ox + i * pxStep;
             ticks.push(
-              <line key={`tX${i}`} x1={xPx} y1={axisXY - 5} x2={xPx} y2={axisXY + 5} stroke="#9B8E7E" strokeWidth={1.2} />
+              <line key={`tX${i}`} x1={xPx} y1={axisXY - 5} x2={xPx} y2={axisXY + 5} stroke="#B5BAC1" strokeWidth={1.2} />
             );
           }
           return ticks;
@@ -261,7 +266,7 @@ function InteractiveGrid({ children }) {
             if (Math.abs(i * unitStep) < 1e-10) continue;
             const yPx = oy + i * pxStep;
             ticks.push(
-              <line key={`tY${i}`} x1={axisYX - 5} y1={yPx} x2={axisYX + 5} y2={yPx} stroke="#9B8E7E" strokeWidth={1.2} />
+              <line key={`tY${i}`} x1={axisYX - 5} y1={yPx} x2={axisYX + 5} y2={yPx} stroke="#B5BAC1" strokeWidth={1.2} />
             );
           }
           return ticks;
@@ -278,10 +283,16 @@ function InteractiveGrid({ children }) {
 // ────────────────────────────────────────────────────
 //  MatterCanvas - Render and update Matter.js
 // ────────────────────────────────────────────────────
-function MatterCanvas({ size, offset, zoom, simState }) {
+function MatterCanvas({ size, offset, zoom, simState, initialPhysics, onPhysicsChange }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const bodyMap = useRef(new Map()); // Maps obj.id -> Matter.Body
+  const restoredBodiesRef = useRef(new Set());
+  const onPhysicsChangeRef = useRef(onPhysicsChange);
+
+  useEffect(() => {
+    onPhysicsChangeRef.current = onPhysicsChange;
+  }, [onPhysicsChange]);
 
   const { w, h } = size;
   const basePixelsPerUnit = 50; 
@@ -291,7 +302,10 @@ function MatterCanvas({ size, offset, zoom, simState }) {
 
   // 1. Initialize engine
   useEffect(() => {
-    const engine = Matter.Engine.create();
+    const engine = Matter.Engine.create({
+      positionIterations: 16,
+      velocityIterations: 12
+    });
     engineRef.current = engine;
     
     // Create an invisible static ground plane at y=0 extending downwards.
@@ -304,12 +318,45 @@ function MatterCanvas({ size, offset, zoom, simState }) {
     Matter.Composite.add(engine.world, ground);
 
     let raf;
+    let lastSave = performance.now();
     let lastTime = performance.now();
+    let accumulator = 0;
+    const TIME_STEP = 1000 / 120; // 120Hz for much better high-speed collision detection
+
     const loop = (now) => {
-      // cap delta to avoid massive leaps on tab switch
-      Matter.Engine.update(engine, Math.min(now - lastTime, 32)); 
+      let delta = now - lastTime;
+      if (delta > 100) delta = 100; // Cap to prevent spiral of death on lag/tab switch
       lastTime = now;
+      accumulator += delta;
+
+      // Ensure physics engine only progresses precisely according to real time passed
+      while (accumulator >= TIME_STEP) {
+        Matter.Engine.update(engine, TIME_STEP);
+        accumulator -= TIME_STEP;
+      }
+
       raf = requestAnimationFrame(loop);
+
+      if (now - lastSave > 3000) {
+        lastSave = now;
+        if (onPhysicsChangeRef.current) {
+           const bodiesData = {};
+           let hasMovingBodies = false;
+           for (const [id, body] of bodyMap.current.entries()) {
+               bodiesData[id] = {
+                   position: { ...body.position },
+                   angle: body.angle,
+                   velocity: { ...body.velocity },
+                   angularVelocity: body.angularVelocity
+               };
+               if (body.speed > 0.1 || Math.abs(body.angularVelocity) > 0.1) {
+                   hasMovingBodies = true;
+               }
+           }
+           // Only update local state, delay firebase writes till things stop moving or user changes config
+           onPhysicsChangeRef.current(bodiesData, hasMovingBodies);
+        }
+      }
     };
     raf = requestAnimationFrame(loop);
     
@@ -345,7 +392,6 @@ function MatterCanvas({ size, offset, zoom, simState }) {
     simState.objects.forEach(obj => {
       if (!obj.isSpawned) return;
 
-      const r = 0.5; // base radius/half-size in world units
       let body = bodyMap.current.get(obj.id);
       
       // Recreate body if shape or size changes
@@ -358,23 +404,31 @@ function MatterCanvas({ size, offset, zoom, simState }) {
       if (!body) {
         // start falling from height property if available, otherwise 10
         const startY = obj.values?.height !== undefined ? obj.values.height : 10;
+        // slight random x to prevent precise overlap blowing up the physics engine
+        const startX = (Math.random() - 0.5) * 0.1; 
         const s = obj.size !== undefined ? obj.size : 1; 
 
         let newBody;
-        const opts = { restitution: 0.8, friction: 0.1 };
+        const opts = { restitution: 0.6, friction: 0.8 };
+        // Super high grip friction ensures circle rolls instead of sliding
+        if (obj.shape === 'circle') {
+          opts.friction = 1.0;
+          opts.frictionStatic = 2.0;
+          opts.slop = 0.01;
+        }
         switch(obj.shape) {
           case 'circle': 
-            // s is radius
-            newBody = Matter.Bodies.circle(0, startY, s, opts); 
+            // Control panel says "รัศมี (r)", so s is the radius
+            newBody = Matter.Bodies.circle(startX, startY, s, opts); 
             break;
           case 'polygon-3': 
-            // matter.js polygon size is radius of bounding circle, a triangle of sides 's' roughly has circumradius s / Math.sqrt(3)
-            newBody = Matter.Bodies.polygon(0, startY, 3, s / Math.sqrt(3), opts); 
+            // equilateral triangle: circumradius is s / sqrt(3)
+            newBody = Matter.Bodies.polygon(startX, startY, 3, s / Math.sqrt(3), opts); 
             break;
           case 'rectangle': 
           default: 
             // rectangular sides equal to width s
-            newBody = Matter.Bodies.rectangle(0, startY, s, s, opts); 
+            newBody = Matter.Bodies.rectangle(startX, startY, s, s, opts); 
             break;
         }
         newBody.label = obj.shape;
@@ -392,6 +446,15 @@ function MatterCanvas({ size, offset, zoom, simState }) {
         Matter.Composite.add(engine.world, newBody);
         bodyMap.current.set(obj.id, newBody);
         body = newBody;
+
+        if (initialPhysics?.bodies?.[obj.id] && !restoredBodiesRef.current.has(obj.id)) {
+            const saved = initialPhysics.bodies[obj.id];
+            Matter.Body.setPosition(body, saved.position);
+            Matter.Body.setAngle(body, saved.angle);
+            Matter.Body.setVelocity(body, saved.velocity);
+            Matter.Body.setAngularVelocity(body, saved.angularVelocity);
+            restoredBodiesRef.current.add(obj.id);
+        }
       }
 
       // Update properties
@@ -410,7 +473,7 @@ function MatterCanvas({ size, offset, zoom, simState }) {
       body.frictionAir = simState.airResistance ? 0.05 : 0;
     });
 
-  }, [simState]);
+  }, [simState, initialPhysics?.bodies]);
 
   // 3. Render Canvas synced with camera
   useEffect(() => {
@@ -489,9 +552,31 @@ function MatterCanvas({ size, offset, zoom, simState }) {
 // ────────────────────────────────────────────────────
 //  PhysicsBoard (parent component)
 // ────────────────────────────────────────────────────
-export default function PhysicsBoard({ activeSim, isInteracting }) {
+export default function PhysicsBoard({ activeSim, isInteracting, onSaveControlState, onSavePhysicsState }) {
   const shouldHideLogo = isInteracting || activeSim !== null;
   const [simState, setSimState] = useState(null);
+
+  const cameraRef = useRef(activeSim?.physicsState?.camera || { zoom: 1, offset: {x:0, y:0} });
+  const bodiesRef = useRef(activeSim?.physicsState?.bodies || {});
+
+  const handleControlUpdate = useCallback((state) => {
+    setSimState(state);
+    if (onSaveControlState) onSaveControlState(state);
+  }, [onSaveControlState]);
+
+  const handleCameraChange = useCallback((camera) => {
+    cameraRef.current = camera;
+    if (onSavePhysicsState) onSavePhysicsState({ camera: cameraRef.current, bodies: bodiesRef.current });
+  }, [onSavePhysicsState]);
+
+  const handlePhysicsChange = useCallback((bodies, isMoving) => {
+    bodiesRef.current = bodies;
+    if (onSavePhysicsState) {
+       // If things are still moving fast, just save to local React state (immediate = true but no firebase upload)
+       // If they stopped moving, triggers a Firebase write
+       onSavePhysicsState({ camera: cameraRef.current, bodies: bodiesRef.current }, false, isMoving);
+    }
+  }, [onSavePhysicsState]);
 
   return (
     <div className="flex-1 flex flex-col h-full w-full relative">
@@ -521,9 +606,8 @@ export default function PhysicsBoard({ activeSim, isInteracting }) {
           transition={{ duration: 0.4 }}
           className="flex flex-col h-full w-full overflow-hidden"
         >
-          {/* Prompt Title Header */}
           <div className="px-8 pt-6 pb-4 min-w-0">
-            <h2 className="text-[22px] font-bold text-gray-900 truncate max-w-[60%]" title={`หัวข้อแบบจำลอง: ${activeSim.title}`}>
+            <h2 className="text-[22px] font-bold text-[#DBDEE1] bg-[#715A5A] inline-block px-4 py-2 rounded-lg truncate max-w-[60%]" title={`หัวข้อแบบจำลอง: ${activeSim.title}`}>
               หัวข้อแบบจำลอง: {activeSim.title}
             </h2>
           </div>
@@ -531,22 +615,26 @@ export default function PhysicsBoard({ activeSim, isInteracting }) {
           {/* Panel + Grid row */}
           <div className="flex-1 flex min-h-0 px-6 pb-6 gap-4">
             {/* Control Panel */}
-            <div className="rounded-2xl overflow-hidden border border-[#D5CBBD] shadow-sm">
+            <div className="rounded-2xl overflow-hidden border border-[#1E1F22] shadow-sm">
               <ControlPanel 
-                simulationType={activeSim.simulationType} 
-                onUpdate={setSimState}
+                key={activeSim.id}
+                initialState={activeSim.controlState || activeSim.data}
+                simulationType={activeSim.simulationType || activeSim.data?.simulationType || 'default'} 
+                onUpdate={handleControlUpdate}
               />
             </div>
 
             {/* Grid Canvas Area */}
-            <div className="flex-1 rounded-2xl overflow-hidden border border-[#D5CBBD] bg-white relative shadow-sm">
-              <InteractiveGrid>
+            <div className="flex-1 rounded-2xl overflow-hidden border border-[#1E1F22] bg-[#2B2D31] relative shadow-sm">
+              <InteractiveGrid initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange}>
                 {({ size, offset, zoom }) => (
                   <MatterCanvas 
                     size={size} 
                     offset={offset} 
                     zoom={zoom} 
                     simState={simState} 
+                    initialPhysics={activeSim.physicsState}
+                    onPhysicsChange={handlePhysicsChange}
                   />
                 )}
               </InteractiveGrid>

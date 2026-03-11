@@ -32,11 +32,11 @@ export default function ChatArea({ messages, onSendMessage, setIsInteracting }) 
     >
       
       {/* กล่อง Input */}
-      <div className={`relative flex items-center bg-[#CDBEA9] rounded-[28px] p-[6px] shadow-sm drop-shadow-sm transition-opacity duration-500 ${hasSentMessage ? 'opacity-50 pointer-events-none' : 'pointer-events-auto'}`}>
+      <div className={`relative flex items-center bg-[#DBDEE1] rounded-[28px] p-[6px] shadow-sm drop-shadow-sm transition-opacity duration-500 ${hasSentMessage ? 'opacity-50 pointer-events-none' : 'pointer-events-auto'}`}>
         
         {/* เลื่อนกล่องซ้ายมือ */}
         <div className="relative group ml-[2px]">
-          <button className="flex items-center justify-center w-10 h-10 rounded-full text-gray-700 transition hover:bg-[#b0a08a] hover:text-black cursor-pointer disabled:opacity-50" disabled={hasSentMessage}>
+          <button className="flex items-center justify-center w-10 h-10 rounded-full text-[#4E5058] transition hover:bg-[#B5BAC1] hover:text-[#1E1F22] cursor-pointer disabled:opacity-50" disabled={hasSentMessage}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
           </button>
           {/* Tooltip */}
@@ -54,12 +54,12 @@ export default function ChatArea({ messages, onSendMessage, setIsInteracting }) 
           onKeyDown={handleKeyDown}
           disabled={hasSentMessage}
           placeholder={hasSentMessage ? "กำลังจำลอง..." : "วันนี้เราทดลองอะไรกันดี?"} 
-          className="flex-1 bg-transparent text-white py-[10px] px-3 outline-none placeholder-white/90 font-medium text-[17px] tracking-wide disabled:opacity-80 drop-shadow-sm"
+          className="flex-1 bg-transparent text-[#313338] py-[10px] px-3 outline-none placeholder-[#80848E] font-medium text-[17px] tracking-wide disabled:opacity-80 drop-shadow-sm"
         />
 
         {/* เลื่อนกล่องขวามือ */}
         <div className="relative group mr-[2px]">
-          <button onClick={handleSend} disabled={hasSentMessage} className="flex items-center justify-center w-10 h-10 rounded-full text-gray-800 transition hover:bg-[#b0a08a] hover:text-black cursor-pointer disabled:opacity-50">
+          <button onClick={handleSend} disabled={hasSentMessage} className="flex items-center justify-center w-10 h-10 rounded-full text-[#4E5058] transition hover:bg-[#B5BAC1] hover:text-[#1E1F22] cursor-pointer disabled:opacity-50">
              {inputText.trim().length > 0 ? (
                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>
              ) : (
@@ -77,8 +77,8 @@ export default function ChatArea({ messages, onSendMessage, setIsInteracting }) 
       </div>
 
       <div className={`text-center mt-3 pointer-events-auto transition-opacity duration-700 ${isActive ? 'opacity-0' : 'opacity-100'}`}>
-        <p className="text-[13px] text-[#A69C8E] font-medium tracking-wide drop-shadow-sm">
-          By messaging with SimuLearn, you agree to our <a href="#" className="underline hover:text-gray-500 font-semibold">Terms</a> and <a href="#" className="underline hover:text-gray-500 font-semibold">Policy</a>.
+        <p className="text-[13px] text-theme-muted font-medium tracking-wide drop-shadow-sm">
+          By messaging with SimuLearn, you agree to our <a href="#" className="underline hover:text-theme-primary font-semibold">Terms</a> and <a href="#" className="underline hover:text-theme-primary font-semibold">Policy</a>.
         </p>
       </div>
     </div>

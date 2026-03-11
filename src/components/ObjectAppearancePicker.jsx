@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 const FONT = "'Chakra Petch', sans-serif";
 
 // Preset Colors 
+// eslint-disable-next-line react-refresh/only-export-components
 export const PRESET_COLORS = [
   '#EF4444', '#F97316', '#F59E0B', '#22C55E', '#14B8A6', '#3B82F6',
   '#DC2626', '#EA580C', '#D97706', '#16A34A', '#0D9488', '#2563EB',
@@ -50,7 +51,8 @@ export default function ObjectAppearancePicker({
   onColorChange,
   onShapeChange,
   onClose,
-  anchorRef,
+  onConfirm,
+  getAnchor,
 }) {
   const popupRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -58,13 +60,15 @@ export default function ObjectAppearancePicker({
   // Position relative to anchor — calculated ONCE on mount only,
   // to avoid re-positioning jumps on every color/shape change.
   useEffect(() => {
-    if (!anchorRef?.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
+    const el = getAnchor ? getAnchor() : null;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
     setPos({ top: rect.bottom + 6, left: rect.left });
 
     const update = () => {
-      if (!anchorRef?.current) return;
-      const r = anchorRef.current.getBoundingClientRect();
+      const el = getAnchor ? getAnchor() : null;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
       setPos({ top: r.bottom + 6, left: r.left });
     };
     window.addEventListener('scroll', update, true);
@@ -79,14 +83,15 @@ export default function ObjectAppearancePicker({
   // Close on outside click
   useEffect(() => {
     const handler = (e) => {
+      const el = getAnchor ? getAnchor() : null;
       if (
         popupRef.current && !popupRef.current.contains(e.target) &&
-        anchorRef?.current && !anchorRef.current.contains(e.target)
+        (!el || !el.contains(e.target))
       ) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose, anchorRef]);
+  }, [onClose, getAnchor]);
 
   const popup = (
     <div
@@ -103,10 +108,10 @@ export default function ObjectAppearancePicker({
     >
       {/* Card */}
       <div style={{
-        background: '#F5F0EA',
+        background: '#313338',
         borderRadius: 14,
-        border: '1px solid #D5CBBD',
-        boxShadow: '0 8px 28px rgba(139,119,93,0.18), 0 2px 6px rgba(0,0,0,0.07)',
+        border: '1px solid #1E1F22',
+        boxShadow: '0 8px 28px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.2)',
         padding: '20px 18px 18px 18px',
         position: 'relative',
       }}>
@@ -142,7 +147,7 @@ export default function ObjectAppearancePicker({
         </button>
 
         {/* ─── COLOR SECTION ─── */}
-        <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#57534E', fontFamily: FONT }}>
+        <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#DBDEE1', fontFamily: FONT }}>
           สีพื้นฐาน
         </h4>
 
@@ -157,10 +162,10 @@ export default function ObjectAppearancePicker({
                 borderRadius: '50%',
                 backgroundColor: c,
                 // Always 3px border to prevent layout shifts on selection
-                border: color === c ? '3px solid #3C3530' : '3px solid transparent',
+                border: color === c ? '3px solid #DBDEE1' : '3px solid transparent',
                 cursor: 'pointer',
                 transition: 'transform 0.12s',
-                boxShadow: color === c ? '0 0 0 1.5px rgba(60,53,48,0.25)' : '0 0 0 1.5px rgba(0,0,0,0.08)',
+                boxShadow: color === c ? '0 0 0 1.5px rgba(219,222,225,0.4)' : '0 0 0 1.5px rgba(0,0,0,0.3)',
               }}
               onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.12)')}
               onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
@@ -170,10 +175,10 @@ export default function ObjectAppearancePicker({
         </div>
 
         {/* ─── DIVIDER ─── */}
-        <div style={{ borderTop: '1px solid #DCD5CB', marginBottom: 14 }} />
+        <div style={{ borderTop: '1px solid #1E1F22', marginBottom: 14 }} />
 
         {/* ─── SHAPE SECTION ─── */}
-        <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#57534E', fontFamily: FONT }}>
+        <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#DBDEE1', fontFamily: FONT }}>
           รูปทรงพื้นฐาน
         </h4>
 
@@ -186,9 +191,9 @@ export default function ObjectAppearancePicker({
                 width: 40,
                 height: 40,
                 borderRadius: 8,
-                border: shape === sh.key ? '2px solid #D97706' : '2px solid #C8BFB2',
-                backgroundColor: shape === sh.key ? '#FFF7ED' : '#EDE8E1',
-                color: shape === sh.key ? '#D97706' : '#78716C',
+                border: shape === sh.key ? '2px solid #F0A03E' : '2px solid #1E1F22',
+                backgroundColor: shape === sh.key ? '#3F4147' : '#2B2D31',
+                color: shape === sh.key ? '#F0A03E' : '#949BA4',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -196,11 +201,11 @@ export default function ObjectAppearancePicker({
                 transition: 'all 0.12s',
               }}
               onMouseEnter={(e) => {
-                if (shape !== sh.key) e.currentTarget.style.borderColor = '#A89880';
+                if (shape !== sh.key) e.currentTarget.style.borderColor = '#3F4147';
                 e.currentTarget.style.transform = 'scale(1.08)';
               }}
               onMouseLeave={(e) => {
-                if (shape !== sh.key) e.currentTarget.style.borderColor = '#C8BFB2';
+                if (shape !== sh.key) e.currentTarget.style.borderColor = '#1E1F22';
                 e.currentTarget.style.transform = 'scale(1)';
               }}
               title={sh.label}
@@ -212,7 +217,7 @@ export default function ObjectAppearancePicker({
 
         {/* ─── CONFIRM BUTTON ─── */}
         <button
-          onClick={onClose}
+          onClick={onConfirm || onClose}
           style={{
             marginTop: 20,
             width: '100%',

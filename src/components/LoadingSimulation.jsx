@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 //อันนี้ผมให้ AI ทำ 100% เลยนะ
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function LoadingSimulation() {
@@ -29,7 +30,7 @@ export default function LoadingSimulation() {
   const currentVariant = variants[variantIndex];
 
   return (
-    <div className="fixed inset-0 bg-[#FAF9F6] z-[100] flex flex-col items-center justify-center font-chakra">
+    <div className="fixed inset-0 bg-theme-panel z-[100] flex flex-col items-center justify-center font-chakra">
       {/* ส่วนข้อความ: Fade เลื่อนลงมาจากด้านบน แล้วออกด้านล่าง */}
       <div className="h-16 flex items-end justify-center mb-10">
         <AnimatePresence mode="wait">
@@ -39,7 +40,7 @@ export default function LoadingSimulation() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="text-[36px] font-bold text-[#CDBEA9] tracking-wide"
+            className="text-[36px] font-bold text-theme-primary tracking-wide"
           >
             {texts[currentTextIndex]}
           </motion.h2>

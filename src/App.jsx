@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from './firebase'; 
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import LoadingSimulation from './components/LoadingSimulation';
@@ -22,6 +22,50 @@ function App() {
   const [simulations, setSimulations] = useState([]);
   const [activeSimId, setActiveSimId] = useState(null);
   const [userPreferences, setUserPreferences] = useState({ theme: 'light', lang: 'th' });
+
+  const saveTimeoutRef = useRef(null);
+
+  const handleSaveControlState = useCallback((state) => {
+    if (!activeSimId) return;
+    // Update local state so it doesn't wait for Firestore
+    setSimulations(prev => prev.map(s => s.id === activeSimId ? { ...s, controlState: state } : s));
+
+    if (myUserId && !myUserId.startsWith("guest_")) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(async () => {
+         try {
+           await setDoc(doc(db, "simulations", activeSimId.toString()), { controlState: state }, { merge: true });
+         } catch (err) {
+           console.error("Save state error:", err);
+         }
+      }, 1000);
+    }
+  }, [activeSimId, myUserId]);
+
+  const physicsSaveTimeoutRef = useRef(null);
+
+  const handleSavePhysicsState = useCallback((physicsState, immediate = false, isMoving = false) => {
+    if (!activeSimId) return;
+
+    if (immediate) {
+       setSimulations(prev => prev.map(s => s.id === activeSimId ? { ...s, physicsState } : s));
+       if (myUserId && !myUserId.startsWith("guest_") && !isMoving) {
+         setDoc(doc(db, "simulations", activeSimId.toString()), { physicsState }, { merge: true }).catch(err => console.error("Save physics error:", err));
+       }
+    } else {
+       if (physicsSaveTimeoutRef.current) clearTimeout(physicsSaveTimeoutRef.current);
+       physicsSaveTimeoutRef.current = setTimeout(async () => {
+         setSimulations(prev => prev.map(s => s.id === activeSimId ? { ...s, physicsState } : s));
+         if (myUserId && !myUserId.startsWith("guest_") && !isMoving) {
+           try {
+             await setDoc(doc(db, "simulations", activeSimId.toString()), { physicsState }, { merge: true });
+           } catch (err) {
+             console.error("Save physics error:", err);
+           }
+         }
+       }, isMoving ? 100 : 2000); // 100ms delay state-only if moving, else 2s save-to-firebase
+    }
+  }, [activeSimId, myUserId]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -64,6 +108,18 @@ function App() {
 
     fetchData();
   }, [myUserId]);
+
+  useEffect(() => {
+    // Apply theme changes to document whenever userPreferences changes, 
+    // ensuring it works across different accounts rather than relying on local storage.
+    if (userPreferences?.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.body.style.backgroundColor = '#37353E';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.style.backgroundColor = '#313338';
+    }
+  }, [userPreferences?.theme]);
 
   const handleSaveSettings = async (newTheme, newLang) => {
     const newSettings = { theme: newTheme, lang: newLang };
@@ -199,7 +255,7 @@ function App() {
   }
 
   return (
-    <div className="app-container relative flex w-full h-screen bg-[#FAF9F6] font-chakra text-gray-800 overflow-hidden">
+    <div className={`app-container relative flex w-full h-screen font-chakra overflow-hidden ${userPreferences?.theme === 'dark' ? 'dark bg-[#1E1F22] text-[#DBDEE1]' : 'bg-[#313338] text-[#DBDEE1]'}`}>
       
       {isLoading && <LoadingSimulation />}
 
@@ -219,7 +275,13 @@ function App() {
       />
 
       <div className="flex-1 relative w-full h-full flex flex-col">
-        <PhysicsBoard activeSim={activeSim} isInteracting={isInteracting} />
+        <PhysicsBoard 
+          key={activeSim?.id || 'empty'}
+          activeSim={activeSim} 
+          isInteracting={isInteracting} 
+          onSaveControlState={handleSaveControlState} 
+          onSavePhysicsState={handleSavePhysicsState}
+        />
         
         {(!activeSim || !activeSim.data) && (
           <ChatArea

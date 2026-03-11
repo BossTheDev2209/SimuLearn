@@ -5,7 +5,7 @@ const SIMULATION_PRESETS = {
   default: [
     { key: 'height',        label: 'ความสูงเริ่มต้น (h)',        unit: 'm',     min: 0, max: 200, step: 0.5, defaultValue: 20  },
     { key: 'mass',          label: 'มวล (m)',                    unit: 'kg',    min: 0.1, max: 500, step: 0.1, defaultValue: 20 },
-    { key: 'restitution',   label: 'สัมประสิทธิ์การคืนตัว (e)',  unit: '',      min: 0, max: 1, step: 0.01, defaultValue: 1   },
+    { key: 'restitution',   label: 'สัมประสิทธิ์การคืนตัว (e)',  unit: '',      min: 0, max: 1, step: 0.01, defaultValue: 0.6 },
   ],
   projectile: [
     { key: 'angle',         label: 'มุมยิง (θ)',                 unit: '°',     min: 0, max: 90, step: 1, defaultValue: 45    },
@@ -41,9 +41,9 @@ function SliderRow({ label, unit, value, min, max, step, onChange, disabled }) {
   return (
     <div className={`mb-3 transition-opacity ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
       <div className="flex items-baseline justify-between mb-1">
-        <span className={`text-[13px] leading-tight ${disabled ? 'text-gray-400' : 'text-gray-700'}`}>{label}</span>
-        <span className={`text-[13px] font-semibold ml-2 whitespace-nowrap ${disabled ? 'text-gray-400' : 'text-gray-800'}`}>
-          {value} <span className="text-gray-400 font-normal text-[11px]">{unit}</span>
+        <span className={`text-[13px] leading-tight ${disabled ? 'text-theme-muted' : 'text-theme-secondary'}`}>{label}</span>
+        <span className={`text-[13px] font-semibold ml-2 whitespace-nowrap ${disabled ? 'text-theme-muted' : 'text-theme-primary'}`}>
+          {value} <span className="text-theme-muted font-normal text-[11px]">{unit}</span>
         </span>
       </div>
       <input
@@ -63,10 +63,10 @@ function SliderRow({ label, unit, value, min, max, step, onChange, disabled }) {
 function ToggleRow({ label, checked, onChange }) {
   return (
     <label className="flex items-center justify-between py-2 cursor-pointer group">
-      <span className="text-[13px] text-gray-700">{label}</span>
+      <span className="text-[13px] text-theme-secondary">{label}</span>
       <div
         className={`relative w-[38px] h-[22px] rounded-full transition-colors duration-200 ${
-          checked ? 'bg-[#F0A03E]' : 'bg-gray-300'
+          checked ? 'bg-theme-accent' : 'bg-theme-hover'
         }`}
         onClick={(e) => { e.preventDefault(); onChange(!checked); }}
       >
@@ -81,22 +81,22 @@ function ToggleRow({ label, checked, onChange }) {
 }
 
 // Main ControlPanel 
-export default function ControlPanel({ simulationType = 'default', onUpdate }) {
+export default function ControlPanel({ simulationType = 'default', onUpdate, initialState }) {
   const presetProps = SIMULATION_PRESETS[simulationType] || SIMULATION_PRESETS.default;
 
   // Objects state (starts empty)
-  const [objects, setObjects] = useState([]);
-  const [objectCounter, setObjectCounter] = useState(0);
+  const [objects, setObjects] = useState(initialState?.objects || []);
+  const [objectCounter, setObjectCounter] = useState(initialState?.objects?.length || 0);
 
   // Which EXISTING object's appearance picker is open (null = none)
   const [activePickerId, setActivePickerId] = useState(null);
   const anchorRefs = useRef({});
 
   // Global settings
-  const [gravity, setGravity] = useState(9.8);
-  const [airResistance, setAirResistance] = useState(false);
-  const [showCoordinates, setShowCoordinates] = useState(true);
-  const [showTrajectory, setShowTrajectory] = useState(true);
+  const [gravity, setGravity] = useState(initialState?.gravity !== undefined ? initialState.gravity : 9.8);
+  const [airResistance, setAirResistance] = useState(initialState?.airResistance !== undefined ? initialState.airResistance : false);
+  const [showCoordinates, setShowCoordinates] = useState(initialState?.showCoordinates !== undefined ? initialState.showCoordinates : true);
+  const [showTrajectory, setShowTrajectory] = useState(initialState?.showTrajectory !== undefined ? initialState.showTrajectory : true);
 
   // Trigger onUpdate whenever objects or settings change
   useEffect(() => {
@@ -173,10 +173,10 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
   }, []);
 
   return (
-    <div className="control-panel w-[260px] min-w-[260px] h-full flex flex-col bg-[#F5F0EA] border-r border-[#D5CBBD] overflow-hidden">
+    <div className="control-panel w-[260px] min-w-[260px] h-full flex flex-col bg-theme-panel border-r border-theme-border overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 bg-[#E8DFD3] border-b border-[#D5CBBD]">
-        <h3 className="text-[15px] font-bold text-gray-800 text-center tracking-wide">
+      <div className="px-4 py-3 bg-theme-sidebar border-b border-theme-border">
+        <h3 className="text-[15px] font-bold text-theme-primary text-center tracking-wide">
           แผงการควบคุม
         </h3>
       </div>
@@ -187,10 +187,10 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
         {objects.length === 0 ? (
           /* Empty State */
           <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] relative">
-            <button
+              <button
               ref={addAnchorRef}
               onClick={startAddingObject}
-              className="w-8 h-8 rounded-full border-2 border-[#D5CBBD] bg-[#F5F0EA] flex items-center justify-center text-gray-500 hover:border-[#F0A03E] hover:text-[#F0A03E] transition-all duration-150 hover:scale-110 shadow-sm"
+              className="w-8 h-8 rounded-full border-2 border-theme-border bg-theme-sidebar flex items-center justify-center text-theme-muted hover:border-[#F0A03E] hover:text-[#F0A03E] transition-all duration-150 hover:scale-110 shadow-sm"
               title="เพิ่มวัตถุ"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -205,8 +205,9 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                 shape={pendingShape}
                 onColorChange={setPendingColor}
                 onShapeChange={setPendingShape}
-                onClose={commitNewObject}
-                anchorRef={addAnchorRef}
+                onClose={() => setPickPending(false)}
+                onConfirm={commitNewObject}
+                getAnchor={() => addAnchorRef.current}
               />
             )}
           </div>
@@ -218,7 +219,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                 {/* Object header */}
                 <div className="flex items-center gap-2 mb-3 relative">
                   <button
-                    ref={(el) => { anchorRefs.current[obj.id] = el; }}
+                    ref={(el) => { if (el) anchorRefs.current[obj.id] = el; }}
                     className={`w-4 h-4 rounded-full flex-shrink-0 border-2 border-transparent transition-all duration-150 focus:outline-none ${!obj.isSpawned ? 'hover:border-gray-400 hover:scale-125 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
                     style={{ backgroundColor: obj.color }}
                     title={obj.isSpawned ? "คุณได้วางวัตถุนี้แล้ว" : "เลือกสี / รูปทรง"}
@@ -232,7 +233,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                       onColorChange={(c) => updateObjectColor(obj.id, c)}
                       onShapeChange={(s) => updateObjectShape(obj.id, s)}
                       onClose={() => setActivePickerId(null)}
-                      anchorRef={{ current: anchorRefs.current[obj.id] }}
+                      getAnchor={() => anchorRefs.current[obj.id]}
                     />
                   )}
                   {obj.isEditing ? (
@@ -243,15 +244,15 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') finishRename(obj.id, e.target.value);
                       }}
-                      className="text-[14px] font-semibold text-gray-800 bg-white/60 border border-[#D5CBBD] rounded px-1.5 py-0.5 outline-none focus:border-[#F0A03E] w-full"
+                      className="text-[14px] font-semibold text-theme-primary bg-theme-main border border-theme-border-hover rounded px-1.5 py-0.5 outline-none focus:border-[#F0A03E] w-full"
                     />
                   ) : (
-                    <span className="text-[14px] font-semibold text-gray-800">{obj.name}</span>
+                    <span className="text-[14px] font-semibold text-theme-primary">{obj.name}</span>
                   )}
                   {!obj.isEditing && (
                     <button
                       onClick={() => startRename(obj.id)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      className="text-theme-muted hover:text-theme-primary transition-colors"
                       title="เปลี่ยนชื่อ"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -262,7 +263,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                   )}
                   <button
                     onClick={() => removeObject(obj.id)}
-                    className="ml-auto text-gray-400 hover:text-red-500 transition-colors"
+                    className="ml-auto text-theme-muted hover:text-red-500 transition-colors"
                     title="ลบวัตถุ"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -303,7 +304,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                   className={`mt-2 mb-1 w-full py-1.5 rounded text-[13px] font-bold transition-colors ${
                     obj.isSpawned 
                       ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-                      : 'bg-[#F0A03E] text-white hover:bg-[#D97706]'
+                      : 'bg-theme-accent text-white hover:bg-[#D97706]'
                   }`}
                 >
                   {obj.isSpawned ? 'ลบออกจากฉาก' : 'วางลงในฉาก (0, 10)'}
@@ -311,7 +312,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
 
                 {/* Separator between objects */}
                 {idx < objects.length - 1 && (
-                  <div className="border-b border-[#DCD5CB] mt-2 mb-3" />
+                  <div className="border-b border-theme-border mt-2 mb-3" />
                 )}
               </div>
             ))}
@@ -322,7 +323,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                 ref={addAnchorRef}
                 onClick={startAddingObject}
                 disabled={objects.length >= PRESET_COLORS.length}
-                className="w-8 h-8 rounded-full border-2 border-[#D5CBBD] bg-white flex items-center justify-center text-gray-500 hover:border-[#F0A03E] hover:text-[#F0A03E] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-8 h-8 rounded-full border-2 border-theme-border bg-[#202225] flex items-center justify-center text-theme-muted hover:border-[#F0A03E] hover:text-[#F0A03E] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title="เพิ่มวัตถุ"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -337,8 +338,9 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
                   shape={pendingShape}
                   onColorChange={setPendingColor}
                   onShapeChange={setPendingShape}
-                  onClose={commitNewObject}
-                  anchorRef={addAnchorRef}
+                  onClose={() => setPickPending(false)}
+                  onConfirm={commitNewObject}
+                  getAnchor={() => addAnchorRef.current}
                 />
               )}
             </div>
@@ -347,8 +349,8 @@ export default function ControlPanel({ simulationType = 'default', onUpdate }) {
 
         {/* ═══════════ GLOBAL SETTINGS ═══════════ */}
         <div className="mt-auto">
-          <div className="border-b border-[#D5CBBD] mb-4" />
-          <h4 className="text-[14px] font-bold text-gray-800 mb-3">ตั้งค่าโลก</h4>
+          <div className="border-b border-theme-border mb-4" />
+          <h4 className="text-[14px] font-bold text-theme-primary mb-3">ตั้งค่าโลก</h4>
 
           <SliderRow
             label="ความเร่งเนื่องจากแรงโน้มถ่วง"

@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function SettingsModal({ isOpen, onClose, userPreferences, onSave }) {
@@ -12,18 +13,21 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
   const themeRef = useRef(null);
   const langRef = useRef(null);
 
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setSearchQuery('');
-      setThemeOpen(false);
-      setLangOpen(false);
-    } else if (userPreferences) {
-      // Sync state when opening
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen && userPreferences) {
       setTheme(userPreferences.theme || 'light');
       setLang(userPreferences.lang || 'th');
     }
-  }, [isOpen, userPreferences]);
+  }
+
+  const handleClose = useCallback(() => {
+    setSearchQuery('');
+    setThemeOpen(false);
+    setLangOpen(false);
+    onClose();
+  }, [onClose]);
 
   // Close custom dropdowns on click outside
   useEffect(() => {
@@ -37,11 +41,11 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
 
   useEffect(() => {
     const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') handleClose();
     };
     if (isOpen) document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   const showTheme = searchQuery.trim() === '' || 'ธีมของเว็บไซต์ theme'.toLowerCase().includes(searchQuery.toLowerCase().trim());
   const showLang = searchQuery.trim() === '' || 'ภาษา language'.toLowerCase().includes(searchQuery.toLowerCase().trim());
@@ -57,7 +61,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           <motion.div
@@ -66,11 +70,11 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             onClick={(e) => e.stopPropagation()} 
-            className="relative w-full max-w-[620px] bg-[#D9CFC7] p-4 rounded-[16px] shadow-2xl flex flex-col"
+            className="relative w-full max-w-[620px] bg-theme-sidebar p-4 rounded-[16px] shadow-2xl flex flex-col"
           >
             {/* Floating Close Button */}
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="absolute -top-4 -right-4 w-10 h-10 bg-[#EF4444] text-black rounded-full flex items-center justify-center shadow-lg border-2 border-black hover:bg-red-600 transition-all z-10 cursor-pointer"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -79,11 +83,11 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
             </button>
 
             {/* Inner Box */}
-            <div className="bg-[#EFE9E3] rounded-xl flex flex-col p-6 min-h-[380px] shadow-sm">
+            <div className="bg-theme-panel rounded-xl flex flex-col p-6 min-h-[380px] shadow-sm">
               
               {/* Real Searchbar */}
-              <div className="w-full bg-[#C9B59C] rounded-lg h-10 flex items-center px-3 mb-6 gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#37353E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="w-full bg-theme-main rounded-lg h-10 flex items-center px-3 mb-6 gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#949BA4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                 </svg>
                 <input 
@@ -91,13 +95,13 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ค้นหาการตั้งค่า..."
-                  className="flex-1 bg-transparent border-none outline-none text-[#37353E] placeholder-[#37353E]/70 text-[15px] font-medium tracking-wide w-full"
+                  className="flex-1 bg-transparent border-none outline-none text-theme-primary placeholder-[#80848E] text-[15px] font-medium tracking-wide w-full"
                 />
               </div>
 
               {/* Title */}
               <div className="mb-6">
-                <h2 className="text-[22px] font-bold text-[#37353E] tracking-wide">การตั้งค่าโดยรวม</h2>
+                <h2 className="text-[22px] font-bold text-theme-primary tracking-wide">การตั้งค่าโดยรวม</h2>
               </div>
 
               {/* Settings List */}
@@ -106,11 +110,11 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                 {/* Theme Option */}
                 {showTheme && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[17px] font-semibold text-[#37353E] tracking-wide">ธีมของเว็บไซต์</span>
+                    <span className="text-[17px] font-semibold text-theme-primary tracking-wide">ธีมของเว็บไซต์</span>
                     <div className="relative" ref={themeRef}>
                       <button 
                         onClick={() => { setThemeOpen(!themeOpen); setLangOpen(false); }}
-                        className="flex items-center justify-between gap-3 bg-[#D9CFC7] text-[#37353E] font-bold px-4 py-1.5 rounded-lg hover:bg-[#C9B59C] transition-colors text-sm min-w-[100px] cursor-pointer"
+                        className="flex items-center justify-between gap-3 bg-[#202225] text-theme-primary font-bold px-4 py-1.5 rounded-lg hover:bg-theme-main transition-colors text-sm min-w-[100px] cursor-pointer"
                       >
                         <span>{theme === 'system' ? 'ระบบ' : theme === 'light' ? 'สว่าง' : 'มืด'}</span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -126,7 +130,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute right-0 top-full mt-2 w-[140px] bg-[#EFE9E3] border border-[#D9CFC7] rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
+                            className="absolute right-0 top-full mt-2 w-[140px] bg-theme-sidebar border border-theme-border rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
                           >
                             {[
                               { id: 'system', label: 'ระบบ' },
@@ -136,7 +140,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                               <button
                                 key={option.id}
                                 onClick={() => { setTheme(option.id); setThemeOpen(false); }}
-                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-[#D9CFC7] transition-colors cursor-pointer ${theme === option.id ? 'text-[#37353E] bg-[#D9CFC7]/50' : 'text-[#44444E]'}`}
+                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-theme-hover transition-colors cursor-pointer ${theme === option.id ? 'text-white bg-theme-hover/50' : 'text-theme-muted'}`}
                               >
                                 <span>{option.label}</span>
                                 {theme === option.id && (
@@ -156,11 +160,11 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                 {/* Language Option */}
                 {showLang && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[17px] font-semibold text-[#37353E] tracking-wide">ภาษา</span>
+                    <span className="text-[17px] font-semibold text-theme-primary tracking-wide">ภาษา</span>
                     <div className="relative" ref={langRef}>
                       <button 
                         onClick={() => { setLangOpen(!langOpen); setThemeOpen(false); }}
-                        className="flex items-center justify-between gap-3 bg-[#D9CFC7] text-[#37353E] font-bold px-4 py-1.5 rounded-lg hover:bg-[#C9B59C] transition-colors text-sm min-w-[100px] cursor-pointer"
+                        className="flex items-center justify-between gap-3 bg-[#202225] text-theme-primary font-bold px-4 py-1.5 rounded-lg hover:bg-theme-main transition-colors text-sm min-w-[100px] cursor-pointer"
                       >
                         <span>{lang === 'th' ? 'ไทย' : 'English'}</span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -176,7 +180,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute right-0 top-full mt-2 w-[140px] bg-[#EFE9E3] border border-[#D9CFC7] rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
+                            className="absolute right-0 top-full mt-2 w-[140px] bg-theme-sidebar border border-theme-border rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
                           >
                             {[
                               { id: 'th', label: 'ไทย' },
@@ -185,7 +189,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                               <button
                                 key={option.id}
                                 onClick={() => { setLang(option.id); setLangOpen(false); }}
-                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-[#D9CFC7] transition-colors cursor-pointer ${lang === option.id ? 'text-[#37353E] bg-[#D9CFC7]/50' : 'text-[#44444E]'}`}
+                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-theme-hover transition-colors cursor-pointer ${lang === option.id ? 'text-white bg-theme-hover/50' : 'text-theme-muted'}`}
                               >
                                 <span>{option.label}</span>
                                 {lang === option.id && (
@@ -205,15 +209,15 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                 {/* Empty State */}
                 {showNoResults && (
                   <div className="flex flex-col items-center justify-center py-6 px-6 opacity-40">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[#37353E] mb-3">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-theme-muted mb-3">
                       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                     </svg>
-                    <p className="text-[15px] font-bold text-[#37353E]">ไม่พบการตั้งค่าที่ค้นหา</p>
+                    <p className="text-[15px] font-bold text-theme-muted">ไม่พบการตั้งค่าที่ค้นหา</p>
                   </div>
                 )}
               </div>
 
-              <div className="border-t-2 border-[#D9CFC7] mt-6 mb-4"></div>
+              <div className="border-t-2 border-theme-border mt-6 mb-4"></div>
               
               <div className="flex-1"></div>
 
