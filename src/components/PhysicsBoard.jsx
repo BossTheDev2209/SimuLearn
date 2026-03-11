@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-// eslint-disable-next-line no-unused-vars
+//อันนี้ผมให้ AI ทำ 100% เลยนะ
 import { motion, AnimatePresence } from 'framer-motion';
 import Matter from 'matter-js';
 import ControlPanel from './ControlPanel';

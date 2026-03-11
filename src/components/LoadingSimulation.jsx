@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-// eslint-disable-next-line no-unused-vars
+//อันนี้ผมให้ AI ทำ 100% เลยนะ
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function LoadingSimulation() {

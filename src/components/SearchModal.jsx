@@ -34,7 +34,7 @@ export default function SearchModal({ isOpen, onClose, simulations, onNewSimulat
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          {/*blur background*/}
+          {/*blur bg*/}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -78,7 +78,7 @@ export default function SearchModal({ isOpen, onClose, simulations, onNewSimulat
             {/*Results*/}
             <div className="max-h-[480px] overflow-y-auto px-3 py-3 custom-scrollbar">
               
-              {/*New Simulation Button*/}
+              {/*New Simulation btn*/}
               <button
                 onClick={() => { onNewSimulation(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-4 rounded-xl bg-[#FAF9F6]/50 hover:bg-[#FAF9F6] transition-all cursor-pointer mb-3 group border border-[#DCD5CB]/30"

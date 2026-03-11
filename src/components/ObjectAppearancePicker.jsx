@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-
+//อันนี้ผมให้ AI ทำ 100% เลยนะ
 const FONT = "'Chakra Petch', sans-serif";
 
 // Preset Colors 
