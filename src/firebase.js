@@ -2,8 +2,8 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  apiKey: "AIzaSyCzkIdJqYmr4_NlVg3iZjB8TK8mM5ljDu4",
+  authDomain: "simulearnt.firebaseapp.com",
   projectId: "simulearnt",
   storageBucket: "simulearnt.firebasestorage.app",
   messagingSenderId: "493681955651",

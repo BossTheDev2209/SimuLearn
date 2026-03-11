@@ -39,7 +39,7 @@ function App() {
     setMessages((prev) => [...prev, { sender: 'user', text }]);
 
     try {
-      const res = await fetch('http://localhost:5000/api/generate-simulation', {
+      const res = await fetch(`https://simulearn-backend.onrender.com/api/generate-simulation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
