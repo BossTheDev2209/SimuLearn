@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import ObjectAppearancePicker, { PRESET_COLORS } from './ObjectAppearancePicker';
 
 const SIMULATION_PRESETS = {
@@ -30,7 +30,6 @@ function createNewObject(index, presetProps) {
     color: PRESET_COLORS[index % PRESET_COLORS.length],
     shape: 'circle',
     isEditing: false,
-    isSpawned: false,
     size: 1, 
     values,
   };
@@ -39,7 +38,7 @@ function createNewObject(index, presetProps) {
 // Slider Row 
 function SliderRow({ label, unit, value, min, max, step, onChange, disabled }) {
   return (
-    <div className={`mb-3 transition-opacity ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className={`mb-3 transition-opacity ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <div className="flex items-baseline justify-between mb-1">
         <span className={`text-[13px] font-medium leading-tight ${disabled ? 'text-theme-muted' : 'text-theme-primary'}`}>{label}</span>
         <span className={`text-[13px] font-bold ml-2 whitespace-nowrap ${disabled ? 'text-theme-muted' : 'text-[#FFB65A] dark:text-[#FFB65A]'}`}>
@@ -53,22 +52,27 @@ function SliderRow({ label, unit, value, min, max, step, onChange, disabled }) {
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="control-slider w-full accent-[#FFB65A]"
+        className={`control-slider w-full accent-[#FFB65A] ${disabled ? 'grayscale' : ''}`}
+        disabled={disabled}
       />
     </div>
   );
 }
 
 // Toggle Row 
-function ToggleRow({ label, checked, onChange }) {
+function ToggleRow({ label, checked, onChange, disabled }) {
   return (
-    <label className="flex items-center justify-between py-2 cursor-pointer group">
+    <label className={`flex items-center justify-between py-2 transition-opacity ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer group'}`}>
       <span className="text-[13px] font-medium text-theme-primary">{label}</span>
       <div
         className={`relative w-[38px] h-[22px] rounded-full transition-colors duration-200 ${
           checked ? 'bg-[#FFB65A]' : 'bg-gray-300 dark:bg-[#3F4147]'
         }`}
-        onClick={(e) => { e.preventDefault(); onChange(!checked); }}
+        onClick={(e) => { 
+          if(disabled) return;
+          e.preventDefault(); 
+          onChange(!checked); 
+        }}
       >
         <div
           className={`absolute top-[2px] w-[18px] h-[18px] rounded-full bg-white shadow transition-transform duration-200 ${
@@ -81,11 +85,14 @@ function ToggleRow({ label, checked, onChange }) {
 }
 
 // Main ControlPanel 
-export default function ControlPanel({ simulationType = 'default', onUpdate, initialState }) {
+const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'default', onUpdate, initialState, isLocked }, ref) {
   const presetProps = SIMULATION_PRESETS[simulationType] || SIMULATION_PRESETS.default;
 
-  const [objects, setObjects] = useState(initialState?.objects || []);
-  const [objectCounter, setObjectCounter] = useState(initialState?.objects?.length || 0);
+  // Start with empty objects — objects are added explicitly via addObject() or the + button.
+  // This prevents stale saved objects (e.g. from a previous session) from appearing on load.
+  const [objects, setObjects] = useState([]);
+  const [objectCounter, setObjectCounter] = useState(0);
+  const objectCounterRef = useRef(0); // Stable ref — no stale closure in imperative handle
   const [activePickerId, setActivePickerId] = useState(null);
   const anchorRefs = useRef({});
 
@@ -94,17 +101,34 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
   const [showCoordinates, setShowCoordinates] = useState(initialState?.showCoordinates !== undefined ? initialState.showCoordinates : true);
   const [showTrajectory, setShowTrajectory] = useState(initialState?.showTrajectory !== undefined ? initialState.showTrajectory : true);
 
-  // ส่ง Update ไปบอก Parent เมื่อมีการเปลี่ยนแปลง
-  // 🌟 1. ป้องกันลูปนรก: เช็คก่อนว่าข้อมูลเปลี่ยนจริงๆ ถึงจะยอมดึงมาอัปเดต
-  useEffect(() => {
-    if (initialState?.objects && JSON.stringify(initialState.objects) !== JSON.stringify(objects)) {
-       setObjects(initialState.objects);
-       setObjectCounter(Math.max(initialState.objects.length, objectCounter));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialState?.objects]);
+  // Keep objectCounterRef in sync
+  useEffect(() => { objectCounterRef.current = objectCounter; }, [objectCounter]);
 
-  // 🌟 ส่งข้อมูลกลับให้กระดานฟิสิกส์ (ถอด onUpdate ออกจาก Dependency เพื่อหยุดลูป)
+  // Expose addObject + clearAll for canvas/toolbar-side control
+  useImperativeHandle(ref, () => ({
+    addObject: (objData) => {
+      const counter = objectCounterRef.current;
+      const newObj = {
+        id: objData.id || ('obj_' + Date.now()),
+        name: `วัตถุ ${counter + 1}`,
+        color: objData.color || PRESET_COLORS[counter % PRESET_COLORS.length],
+        shape: objData.shape || 'circle',
+        size: objData.size || 1,
+        isEditing: false,
+        position: objData.position,
+        isSpawned: true,
+        values: objData.values || {},
+      };
+      setObjects((prev) => [...prev, newObj]);
+      setObjectCounter((prev) => prev + 1);
+    },
+    clearAll: () => {
+      setObjects([]);
+    },
+  }));
+
+  // ControlPanel owns its state exclusively. Remount via key prop to reset.
+
   useEffect(() => {
     if (onUpdate) {
       onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory });
@@ -137,7 +161,6 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
     setObjects((prev) => prev.map((o) => (o.id === objId ? { ...o, values: { ...o.values, [key]: value } } : o)));
   }, []);
 
-  // 🌟 (ข้อ 2) ฟังก์ชันลบวัตถุ เตะออกจากฉากและลบออกจาก State ถาวร
   const removeObject = useCallback((objId) => {
     setObjects((prev) => prev.filter((o) => o.id !== objId));
   }, []);
@@ -163,9 +186,18 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
   }, []);
 
   return (
-    <div className="control-panel w-full h-full flex flex-col bg-theme-panel overflow-hidden">
+    <div className="control-panel w-full h-full flex flex-col bg-theme-panel overflow-hidden relative">
+      
+      {/* Banner when locked (simulation is running) */}
+      {isLocked && (
+        <div className="absolute top-0 left-0 right-0 z-50 bg-[#FFB65A]/10 border-b border-[#FFB65A]/20 py-1.5 flex justify-center items-center gap-2 pointer-events-none">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFB65A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+           <span className="text-xs font-bold text-[#FFB65A]">หยุดเล่นก่อนแก้ไขค่า</span>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="px-4 py-3 bg-theme-sidebar border-b border-theme-border">
+      <div className={`px-4 py-3 bg-theme-sidebar border-b border-theme-border ${isLocked ? 'pt-8' : ''}`}>
         <h3 className="text-[15px] font-bold text-theme-primary text-center tracking-wide">
           แผงการควบคุม
         </h3>
@@ -179,7 +211,8 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
               <button
               ref={addAnchorRef}
               onClick={startAddingObject}
-              className="w-10 h-10 rounded-full border border-theme-border bg-theme-main flex items-center justify-center text-theme-muted hover:border-[#FFB65A] hover:text-[#FFB65A] transition-all duration-150 hover:scale-110 shadow-sm"
+              disabled={isLocked}
+              className={`w-10 h-10 rounded-full border border-theme-border bg-theme-main flex items-center justify-center text-theme-muted transition-all duration-150 shadow-sm ${isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:border-[#FFB65A] hover:text-[#FFB65A] hover:scale-110'}`}
               title="เพิ่มวัตถุ"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -188,7 +221,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
               </svg>
             </button>
             
-            {pickPending && (
+            {pickPending && !isLocked && (
               <ObjectAppearancePicker
                 color={pendingColor}
                 shape={pendingShape}
@@ -209,12 +242,13 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
                 <div className="flex items-center gap-2 mb-3 relative">
                   <button
                     ref={(el) => { if (el) anchorRefs.current[obj.id] = el; }}
-                    className={`w-4 h-4 rounded-full flex-shrink-0 border-2 border-transparent transition-all duration-150 focus:outline-none hover:border-gray-400 hover:scale-125 cursor-pointer`}
+                    disabled={isLocked}
+                    className={`w-4 h-4 rounded-full flex-shrink-0 border-2 border-transparent transition-all duration-150 focus:outline-none ${isLocked ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-400 hover:scale-125 cursor-pointer'}`}
                     style={{ backgroundColor: obj.color }}
                     title={"เลือกสี / รูปทรง"}
                     onClick={() => setActivePickerId(activePickerId === obj.id ? null : obj.id)}
                   />
-                  {activePickerId === obj.id && (
+                  {activePickerId === obj.id && !isLocked && (
                     <ObjectAppearancePicker
                       color={obj.color}
                       shape={obj.shape}
@@ -224,7 +258,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
                       getAnchor={() => anchorRefs.current[obj.id]}
                     />
                   )}
-                  {obj.isEditing ? (
+                  {obj.isEditing && !isLocked ? (
                     <input
                       autoFocus
                       defaultValue={obj.name}
@@ -235,9 +269,9 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
                       className="text-[14px] font-semibold text-theme-primary bg-theme-main border border-theme-border-hover rounded px-1.5 py-0.5 outline-none focus:border-[#FFB65A] w-full"
                     />
                   ) : (
-                    <span className="text-[14px] font-semibold text-theme-primary">{obj.name}</span>
+                    <span className={`text-[14px] font-semibold ${isLocked ? 'text-theme-muted' : 'text-theme-primary'}`}>{obj.name}</span>
                   )}
-                  {!obj.isEditing && (
+                  {!obj.isEditing && !isLocked && (
                     <button
                       onClick={() => startRename(obj.id)}
                       className="text-theme-muted hover:text-theme-primary transition-colors"
@@ -250,10 +284,10 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
                     </button>
                   )}
                   
-                  {/* 🌟 (ข้อ 3) เปลี่ยนปุ่มลบด้านบนขวา ให้สีแดงตอน Hover */}
                   <button
                     onClick={() => removeObject(obj.id)}
-                    className="ml-auto text-theme-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1 rounded transition-colors"
+                    disabled={isLocked}
+                    className={`ml-auto p-1 rounded transition-colors ${isLocked ? 'text-theme-muted opacity-40 cursor-not-allowed' : 'text-theme-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'}`}
                     title="ลบวัตถุ"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -272,6 +306,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
                   max={20}
                   step={0.5}
                   onChange={(v) => updateObjectSize(obj.id, v)}
+                  disabled={isLocked}
                 />
                 
                 {presetProps.map((prop) => (
@@ -279,20 +314,19 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
                     key={prop.key}
                     label={prop.label}
                     unit={prop.unit}
-                    // 🌟 2. ดักไว้ก่อน: ถ้าค่าความสูง (height) หรือมุมหายไป ให้ใช้ค่าเริ่มต้นแทน จะได้ไม่ error
                     value={obj.values?.[prop.key] ?? prop.defaultValue ?? 0}
                     min={prop.min}
                     max={prop.max}
                     step={prop.step}
                     onChange={(v) => updateObjectValue(obj.id, prop.key, v)}
-                    disabled={obj.isSpawned}
+                    disabled={isLocked}
                   />
                 ))}
 
-                {/* 🌟 (ข้อ 3) ปุ่มแดงลบวัตถุใหญ่ด้านล่าง ที่ Hover แล้วสีเปลี่ยน */}
                 <button
                   onClick={() => removeObject(obj.id)}
-                  className="mt-2 mb-1 w-full py-2 rounded-lg text-[13px] font-bold transition-all bg-red-50 text-red-500 border border-red-200 hover:bg-red-500 hover:text-white dark:bg-red-900/10 dark:border-red-800/30 dark:hover:bg-red-600 dark:hover:text-white"
+                  disabled={isLocked}
+                  className={`mt-2 mb-1 w-full py-2 rounded-lg text-[13px] font-bold transition-all border ${isLocked ? 'bg-gray-100 text-gray-400 border-gray-200 dark:bg-[#3F4147] dark:text-gray-500 dark:border-transparent opacity-50 cursor-not-allowed' : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-500 hover:text-white dark:bg-red-900/10 dark:border-red-800/30 dark:hover:bg-red-600 dark:hover:text-white'}`}
                 >
                   ลบออกจากฉาก
                 </button>
@@ -309,8 +343,8 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
               <button
                 ref={addAnchorRef}
                 onClick={startAddingObject}
-                disabled={objects.length >= PRESET_COLORS.length}
-                className="w-10 h-10 rounded-full border border-theme-border bg-theme-main flex items-center justify-center text-theme-muted hover:border-[#FFB65A] hover:text-[#FFB65A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                disabled={objects.length >= PRESET_COLORS.length || isLocked}
+                className={`w-10 h-10 rounded-full border border-theme-border bg-theme-main flex items-center justify-center text-theme-muted transition-colors shadow-sm ${objects.length >= PRESET_COLORS.length || isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:border-[#FFB65A] hover:text-[#FFB65A]'}`}
                 title="เพิ่มวัตถุ"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -319,7 +353,7 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
                 </svg>
               </button>
               
-              {pickPending && (
+              {pickPending && !isLocked && (
                 <ObjectAppearancePicker
                   color={pendingColor}
                   shape={pendingShape}
@@ -347,10 +381,11 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
             max={30}
             step={0.1}
             onChange={setGravity}
+            disabled={isLocked}
           />
 
           <div className="mt-2">
-            <ToggleRow label="แรงต้านอากาศ" checked={airResistance} onChange={setAirResistance} />
+            <ToggleRow label="แรงต้านอากาศ" checked={airResistance} onChange={setAirResistance} disabled={isLocked} />
             <ToggleRow label="แสดงเส้นพิกัด" checked={showCoordinates} onChange={setShowCoordinates} />
             <ToggleRow label="แสดงเส้นวิถี" checked={showTrajectory} onChange={setShowTrajectory} />
           </div>
@@ -358,4 +393,6 @@ export default function ControlPanel({ simulationType = 'default', onUpdate, ini
       </div>
     </div>
   );
-} 
+});
+
+export default ControlPanel;

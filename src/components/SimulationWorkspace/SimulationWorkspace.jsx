@@ -31,8 +31,9 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const [timeScale, setTimeScale] = useState(1);
   const [displayTime, setDisplayTime] = useState(0);
 
-  // --- State สำหรับ ถังขยะ (Clear All) ---
+  // --- State สำหรับ ถังขยะ และ Tooltip (Toast) ---
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [spawnToast, setSpawnToast] = useState(null); // เก็บข้อความแจ้งเตือนเสกไม่ได้
 
   // Use a ref for continuous time updates without causing top-level re-renders
   const timeStateRef = useRef({ time: 0, isPlaying: false, timeScale: 1, targetTime: null });
@@ -40,6 +41,22 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   // Update ref from state
   useEffect(() => { timeStateRef.current.isPlaying = isPlaying; }, [isPlaying]);
   useEffect(() => { timeStateRef.current.timeScale = timeScale; }, [timeScale]);
+
+  // 🌟 1. ฟีเจอร์กด Spacebar เพื่อ Play / Pause
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // ดักไม่ให้ทำงานถ้ากำลังพิมพ์ในช่อง Input
+      if (e.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        e.preventDefault(); // ป้องกันหน้าจอเลื่อนลงเวลาเว้นวรรค
+        const nextState = !timeStateRef.current.isPlaying;
+        timeStateRef.current.isPlaying = nextState;
+        setIsPlaying(nextState);
+        if (!hasStartedOnce) setHasStartedOnce(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasStartedOnce]);
 
   const [isToolbarOpen, setIsToolbarOpen] = useState(true);
   const [activeTool, setActiveTool] = useState('cursor');
@@ -54,10 +71,17 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
 
   const cameraRef = useRef(activeSim?.physicsState?.camera || { zoom: 1, offset: {x:0, y:0} });
   const bodiesRef = useRef(activeSim?.physicsState?.bodies || {});
-  const matterCanvasRef = useRef(null); 
+  const matterCanvasRef = useRef(null);
+  const controlPanelRef = useRef(null); // Imperative handle to ControlPanel
+  const [restartToken, setRestartToken] = useState(0); // Increment to remount ControlPanel
 
+  // 🌟 3. แก้บัคกระพริบ/ค้างตอนปรับขนาด
   const handleControlUpdate = useCallback((state) => {
-    setSimState(state);
+    // ใช้ stringify เช็คว่าค่าเปลี่ยนจริงๆ ถึงจะอนุญาตให้อัปเดต State (กันลูปนรก)
+    setSimState(prev => {
+      if (JSON.stringify(prev) === JSON.stringify(state)) return prev;
+      return state;
+    });
     if (onSaveControlState) onSaveControlState(state);
   }, [onSaveControlState]);
 
@@ -75,8 +99,8 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const handleTogglePlay = () => {
     if (!hasStartedOnce) setHasStartedOnce(true);
     const next = !timeStateRef.current.isPlaying;
-    timeStateRef.current.isPlaying = next; // Immediate ref update for animation loop
-    setIsPlaying(next); // React state for UI
+    timeStateRef.current.isPlaying = next; 
+    setIsPlaying(next); 
   };
 
   const handleRestart = () => {
@@ -85,13 +109,14 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     timeStateRef.current.isPlaying = false;
     setIsPlaying(false);
     setDisplayTime(0);
+    setRestartToken(prev => prev + 1); // Remount ControlPanel back to initial state
     if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
   };
 
+  // 🌟 2. รองรับการกรอเวลากลับ (Rewind) ผ่านเลขที่พิมพ์
   const handleSeek = (val) => {
     timeStateRef.current.isPlaying = false;
     setIsPlaying(false);
-    
     timeStateRef.current.time = val;
     setDisplayTime(val);
 
@@ -112,7 +137,6 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     }
   }, [onSavePhysicsState]);
 
-  // ฟังก์ชันดักจับการกด Toolbar (ถ้าเป็นถังขยะให้เปิด Modal แทนการสลับ Tool)
   const handleToolClick = (toolId) => {
     if (toolId === 'clearAll') {
       setIsClearModalOpen(true);
@@ -121,41 +145,57 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     }
   };
 
-  // ฟังก์ชันยืนยันการลบ
   const handleClearAllConfirm = () => {
-    setSimState(prev => {
-      const currentState = prev || { gravity: 9.8, airResistance: false, objects: [] };
-      const newState = {
-         ...currentState,
-         objects: [] 
-      };
-      if (onSaveControlState) onSaveControlState(newState);
-      return newState;
-    });
+    // Route through ControlPanel so it stays the single owner of object state
+    if (controlPanelRef.current?.clearAll) {
+      controlPanelRef.current.clearAll();
+    }
     setIsClearModalOpen(false);
   };
 
+  // ฟังก์ชันโชว์แจ้งเตือน
+  const showToast = (message) => {
+    setSpawnToast({ message, id: Date.now() });
+    setTimeout(() => setSpawnToast(null), 3000); // ปิดเองใน 3 วิ
+  };
+
+  // 🌟 4. ระบบเช็คพื้นที่ซ้อนทับ และเด้งหาที่ว่างให้
   const handleGridClick = useCallback((wx, wy) => {
     if (activeTool === 'add') {
+      
+      // Physics body radius = obj.size world units. Use 1.1x padding.
+      const overlapRadiusBase = 1.1;
+      const requiredRadius = spawnConfig.size * overlapRadiusBase;
+
+      // Check if click position overlaps any existing object
+      const currentObjects = simState?.objects || [];
+      const currentBodies = bodiesRef.current || {};
+      for (const obj of currentObjects) {
+        const pos = currentBodies[obj.id]?.position || obj.position;
+        if (!pos) continue;
+        const dx = wx - pos.x;
+        const dy = wy - pos.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const objRadius = (obj.size || 1) * overlapRadiusBase;
+        if (dist < requiredRadius + objRadius) {
+          showToast('ไม่สามารถเสกวัตถุตรงนี้ได้');
+          return;
+        }
+      }
+
+      // Spawn at exactly the clicked position
       const newObj = {
         id: 'obj_' + Date.now(),
         shape: spawnConfig.shape,
         size: spawnConfig.size,
         color: spawnConfig.color,
         isSpawned: true,
-        position: { x: wx, y: wy }, 
+        position: { x: wx, y: wy },
         values: { mass: spawnConfig.mass, restitution: spawnConfig.restitution }
       };
-
-      setSimState(prev => {
-        const currentState = prev || { gravity: 9.8, airResistance: false, objects: [] };
-        const newState = {
-           ...currentState,
-           objects: [...(currentState.objects || []), newObj]
-        };
-        if (onSaveControlState) onSaveControlState(newState);
-        return newState;
-      });
+      if (controlPanelRef.current?.addObject) {
+        controlPanelRef.current.addObject(newObj);
+      }
 
     } else if (activeTool === 'erase') {
       const currentObjects = simState?.objects || [];
@@ -172,7 +212,8 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
          const dy = wy - pos.y;
          const dist = Math.sqrt(dx*dx + dy*dy);
          
-         if (dist < (obj.size || 1) && dist < minDistance) {
+         // Erase hitbox: 2.5x the object's physics radius for easier clicking
+         if (dist < (obj.size || 1) * 2.5 && dist < minDistance) {
             minDistance = dist;
             targetId = obj.id;
          }
@@ -217,6 +258,22 @@ return (
         )}
       </AnimatePresence>
 
+      {/* 🌟 Toast แจ้งเตือนเสกไม่ได้ (จะเด้งตรงกลางจอ) */}
+      <AnimatePresence>
+        {spawnToast && (
+          <motion.div 
+            key={spawnToast.id}
+            initial={{ opacity: 0, y: -20, x: '-50%' }} 
+            animate={{ opacity: 1, y: 0, x: '-50%' }} 
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="absolute top-24 left-1/2 z-[200] bg-red-500 text-white px-5 py-2.5 rounded-xl shadow-2xl font-bold border-2 border-red-700/30 flex items-center gap-2 text-sm font-['Chakra_Petch']"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            {spawnToast.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {activeSim && activeSim.data && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="flex flex-col h-full w-full overflow-hidden">
           <div className="px-8 pt-6 pb-4 min-w-0">
@@ -227,21 +284,14 @@ return (
 
           <div className="flex-1 flex min-h-0 px-6 pb-6 gap-4">
             <div className="h-full rounded-2xl overflow-hidden border border-theme-border shadow-sm bg-theme-panel z-20 w-[280px] shrink-0 relative">
-              {/* Properties locked overlay before first Play */}
-              {!hasStartedOnce && (
-                 <div className="absolute inset-0 z-50 bg-black/5 dark:bg-white/5 backdrop-blur-[1px] flex items-center justify-center p-4 text-center select-none pointer-events-none transition-all duration-300">
-                    <div className="bg-white/90 dark:bg-black/90 px-4 py-2 rounded-xl shadow-lg border border-theme-border flex flex-col items-center">
-                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-red-500 mb-1"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                       <span className="text-sm font-bold text-red-500">กด Play ก่อนเริ่มแก้ไข</span>
-                    </div>
-                 </div>
-              )}
-              <div className={`h-full ${!hasStartedOnce ? 'opacity-50 pointer-events-none' : ''}`}>
-                <ControlPanel 
-                  key={`${activeSim.id}-${simState?.objects?.length || 0}`} 
-                  initialState={simState || activeSim.controlState || activeSim.data} 
-                  simulationType={activeSim.simulationType || activeSim.data?.simulationType || 'default'} 
-                  onUpdate={handleControlUpdate} 
+              <div className="h-full">
+                <ControlPanel
+                  ref={controlPanelRef}
+                  key={`${activeSim.id}-${restartToken}`}
+                  initialState={simState || activeSim.controlState || activeSim.data}
+                  simulationType={activeSim.simulationType || activeSim.data?.simulationType || 'default'}
+                  isLocked={isPlaying}
+                  onUpdate={handleControlUpdate}
                 />
               </div>
             </div>
@@ -279,7 +329,7 @@ return (
                   </button>
                 </div>
 
-                {/* 🌟 กล่องตั้งค่าเสกวัตถุ */}
+                {/* กล่องตั้งค่าเสกวัตถุ */}
                 <AnimatePresence>
                   {activeTool === 'add' && (
                     <motion.div

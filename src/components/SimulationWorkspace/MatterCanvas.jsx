@@ -27,12 +27,14 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
   const ox = w / 2 + offset.x;
   const oy = h / 2 + offset.y;
 
-  // 🌟 ระบบจับพิกัดเมาส์ (ทำงานตลอดเวลา)
+  // Track mouse position relative to canvas for hologram preview
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const parent = canvas.parentElement;
     const handleMouseMove = (e) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
+      const el = parent || canvas;
+      const rect = el.getBoundingClientRect();
       mouseRef.current = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
@@ -53,6 +55,33 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
     resetSimulation: (pendingAction) => {
       pendingActionRef.current = pendingAction || null;
       setEngineResetToken(prev => prev + 1);
+    },
+    separateBodies: () => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground' && !b.isStatic);
+      // Run a few position-correction passes
+      for (let pass = 0; pass < 5; pass++) {
+        for (let i = 0; i < bodies.length; i++) {
+          for (let j = i + 1; j < bodies.length; j++) {
+            const a = bodies[i];
+            const b = bodies[j];
+            const dx = b.position.x - a.position.x;
+            const dy = b.position.y - a.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+            const radiusA = a.circleRadius || (a.plugin?.size ?? 1);
+            const radiusB = b.circleRadius || (b.plugin?.size ?? 1);
+            const minDist = radiusA + radiusB;
+            if (dist < minDist) {
+              const overlap = (minDist - dist) / 2;
+              const nx = dx / dist;
+              const ny = dy / dist;
+              Matter.Body.setPosition(a, { x: a.position.x - nx * overlap, y: a.position.y - ny * overlap });
+              Matter.Body.setPosition(b, { x: b.position.x + nx * overlap, y: b.position.y + ny * overlap });
+            }
+          }
+        }
+      }
     }
   }));
 
