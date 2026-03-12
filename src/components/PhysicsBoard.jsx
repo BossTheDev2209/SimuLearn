@@ -232,15 +232,26 @@ function InteractiveGrid({ children, initialCamera, onCameraChange }) {
         style={{ overflow: 'hidden' }}
       >
         {/* Sub-grid + major grid lines */}
-        {lines}
+        {lines.map((line) => {
+          const isMajor = line.props.strokeWidth === 1;
+          return (
+            <line 
+              key={line.key} 
+              x1={line.props.x1} y1={line.props.y1} 
+              x2={line.props.x2} y2={line.props.y2} 
+              className={isMajor ? "stroke-gray-300 dark:stroke-[#50535C]" : "stroke-gray-200 dark:stroke-[#3F4147]"} 
+              strokeWidth={line.props.strokeWidth} 
+            />
+          );
+        })}
 
         {/* X axis (horizontal - ground) */}
-        <line x1={0} y1={axisXY} x2={w} y2={axisXY} stroke="#B5BAC1" strokeWidth={4} />
+        <line x1={0} y1={axisXY} x2={w} y2={axisXY} className="stroke-gray-400 dark:stroke-[#B5BAC1]" strokeWidth={4} />
         {/* Y axis (vertical) */}
-        <line x1={axisYX} y1={0} x2={axisYX} y2={h} stroke="#B5BAC1" strokeWidth={1.8} />
+        <line x1={axisYX} y1={0} x2={axisYX} y2={h} className="stroke-gray-400 dark:stroke-[#B5BAC1]" strokeWidth={1.8} />
 
         {/* Origin dot */}
-        <circle cx={ox} cy={oy} r={3.5} fill="#B5BAC1" />
+        <circle cx={ox} cy={oy} r={3.5} className="fill-gray-400 dark:fill-[#B5BAC1]" />
 
         {/* Tick marks on X axis */}
         {(() => {
@@ -251,7 +262,7 @@ function InteractiveGrid({ children, initialCamera, onCameraChange }) {
             if (Math.abs(i * unitStep) < 1e-10) continue;
             const xPx = ox + i * pxStep;
             ticks.push(
-              <line key={`tX${i}`} x1={xPx} y1={axisXY - 5} x2={xPx} y2={axisXY + 5} stroke="#B5BAC1" strokeWidth={1.2} />
+              <line key={`tX${i}`} x1={xPx} y1={axisXY - 5} x2={xPx} y2={axisXY + 5} className="stroke-gray-400 dark:stroke-[#B5BAC1]" strokeWidth={1.2} />
             );
           }
           return ticks;
@@ -266,14 +277,27 @@ function InteractiveGrid({ children, initialCamera, onCameraChange }) {
             if (Math.abs(i * unitStep) < 1e-10) continue;
             const yPx = oy + i * pxStep;
             ticks.push(
-              <line key={`tY${i}`} x1={axisYX - 5} y1={yPx} x2={axisYX + 5} y2={yPx} stroke="#B5BAC1" strokeWidth={1.2} />
+              <line key={`tY${i}`} x1={axisYX - 5} y1={yPx} x2={axisYX + 5} y2={yPx} className="stroke-gray-400 dark:stroke-[#B5BAC1]" strokeWidth={1.2} />
             );
           }
           return ticks;
         })()}
 
         {/* Axis labels (numbers) */}
-        {labels}
+        {labels.map((label) => (
+           <text
+             key={label.key}
+             x={label.props.x}
+             y={label.props.y}
+             textAnchor={label.props.textAnchor}
+             className="fill-gray-500 dark:fill-[#949BA4]"
+             fontSize={11}
+             fontFamily="Inter, system-ui, sans-serif"
+             style={{ userSelect: 'none' }}
+           >
+             {label.props.children}
+           </text>
+        ))}
       </svg>
       {typeof children === 'function' ? children({ size, offset, zoom }) : children}
     </div>
@@ -578,7 +602,7 @@ export default function PhysicsBoard({ activeSim, isInteracting, onSaveControlSt
     }
   }, [onSavePhysicsState]);
 
-  return (
+return (
     <div className="flex-1 flex flex-col h-full w-full relative">
       {/* Landing Logo */}
       <AnimatePresence>
@@ -607,15 +631,17 @@ export default function PhysicsBoard({ activeSim, isInteracting, onSaveControlSt
           className="flex flex-col h-full w-full overflow-hidden"
         >
           <div className="px-8 pt-6 pb-4 min-w-0">
-            <h2 className="text-[22px] font-bold text-[#DBDEE1] bg-[#715A5A] inline-block px-4 py-2 rounded-lg truncate max-w-[60%]" title={`หัวข้อแบบจำลอง: ${activeSim.title}`}>
+            <h2 
+              className="text-[22px] font-bold text-[#F9F8F6] bg-[#37353E] dark:bg-[#2B2D31] inline-block px-4 py-2 rounded-lg truncate max-w-[60%] shadow-sm border border-transparent dark:border-[#1E1F22]" 
+              title={`หัวข้อแบบจำลอง: ${activeSim.title}`}
+            >
               หัวข้อแบบจำลอง: {activeSim.title}
             </h2>
           </div>
 
-          {/* Panel + Grid row */}
           <div className="flex-1 flex min-h-0 px-6 pb-6 gap-4">
             {/* Control Panel */}
-            <div className="rounded-2xl overflow-hidden border border-[#1E1F22] shadow-sm">
+            <div className="rounded-2xl overflow-hidden border border-theme-border shadow-sm bg-theme-panel">
               <ControlPanel 
                 key={activeSim.id}
                 initialState={activeSim.controlState || activeSim.data}
@@ -625,7 +651,7 @@ export default function PhysicsBoard({ activeSim, isInteracting, onSaveControlSt
             </div>
 
             {/* Grid Canvas Area */}
-            <div className="flex-1 rounded-2xl overflow-hidden border border-[#1E1F22] bg-[#2B2D31] relative shadow-sm">
+            <div className="flex-1 rounded-2xl overflow-hidden border border-theme-border bg-white dark:bg-[#2B2D31] relative shadow-sm">
               <InteractiveGrid initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange}>
                 {({ size, offset, zoom }) => (
                   <MatterCanvas 

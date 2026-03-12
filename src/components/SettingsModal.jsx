@@ -70,12 +70,12 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             onClick={(e) => e.stopPropagation()} 
-            className="relative w-full max-w-[620px] bg-theme-sidebar p-4 rounded-[16px] shadow-2xl flex flex-col"
+            className="relative w-full max-w-[620px] bg-theme-sidebar p-4 rounded-[16px] shadow-2xl flex flex-col border border-theme-border"
           >
             {/* Floating Close Button */}
             <button
               onClick={handleClose}
-              className="absolute -top-4 -right-4 w-10 h-10 bg-[#EF4444] text-black rounded-full flex items-center justify-center shadow-lg border-2 border-black hover:bg-red-600 transition-all z-10 cursor-pointer"
+              className="absolute -top-4 -right-4 w-10 h-10 bg-[#EF4444] text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white dark:border-[#1E1F22] hover:bg-red-600 transition-all z-10 cursor-pointer"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -86,8 +86,8 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
             <div className="bg-theme-panel rounded-xl flex flex-col p-6 min-h-[380px] shadow-sm">
               
               {/* Real Searchbar */}
-              <div className="w-full bg-theme-main rounded-lg h-10 flex items-center px-3 mb-6 gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#949BA4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="w-full bg-theme-main rounded-lg h-10 flex items-center px-3 mb-6 gap-2 border border-theme-border focus-within:border-[#C59355] transition-colors">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-theme-muted" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                 </svg>
                 <input 
@@ -95,7 +95,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ค้นหาการตั้งค่า..."
-                  className="flex-1 bg-transparent border-none outline-none text-theme-primary placeholder-[#80848E] text-[15px] font-medium tracking-wide w-full"
+                  className="flex-1 bg-transparent border-none outline-none text-theme-primary placeholder-theme-muted text-[15px] font-medium tracking-wide w-full"
                 />
               </div>
 
@@ -114,7 +114,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                     <div className="relative" ref={themeRef}>
                       <button 
                         onClick={() => { setThemeOpen(!themeOpen); setLangOpen(false); }}
-                        className="flex items-center justify-between gap-3 bg-[#202225] text-theme-primary font-bold px-4 py-1.5 rounded-lg hover:bg-theme-main transition-colors text-sm min-w-[100px] cursor-pointer"
+                        className="flex items-center justify-between gap-3 bg-theme-main text-theme-primary border border-theme-border font-bold px-4 py-1.5 rounded-lg hover:bg-theme-hover transition-colors text-sm min-w-[100px] cursor-pointer"
                       >
                         <span>{theme === 'system' ? 'ระบบ' : theme === 'light' ? 'สว่าง' : 'มืด'}</span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -130,7 +130,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute right-0 top-full mt-2 w-[140px] bg-theme-sidebar border border-theme-border rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
+                            className="absolute right-0 top-full mt-2 w-[140px] bg-theme-panel border border-theme-border rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
                           >
                             {[
                               { id: 'system', label: 'ระบบ' },
@@ -140,7 +140,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                               <button
                                 key={option.id}
                                 onClick={() => { setTheme(option.id); setThemeOpen(false); }}
-                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-theme-hover transition-colors cursor-pointer ${theme === option.id ? 'text-white bg-theme-hover/50' : 'text-theme-muted'}`}
+                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-theme-hover transition-colors cursor-pointer ${theme === option.id ? 'bg-[#FFB65A] text-gray-900' : 'text-theme-primary'}`}
                               >
                                 <span>{option.label}</span>
                                 {theme === option.id && (
@@ -164,7 +164,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                     <div className="relative" ref={langRef}>
                       <button 
                         onClick={() => { setLangOpen(!langOpen); setThemeOpen(false); }}
-                        className="flex items-center justify-between gap-3 bg-[#202225] text-theme-primary font-bold px-4 py-1.5 rounded-lg hover:bg-theme-main transition-colors text-sm min-w-[100px] cursor-pointer"
+                        className="flex items-center justify-between gap-3 bg-theme-main text-theme-primary border border-theme-border font-bold px-4 py-1.5 rounded-lg hover:bg-theme-hover transition-colors text-sm min-w-[100px] cursor-pointer"
                       >
                         <span>{lang === 'th' ? 'ไทย' : 'English'}</span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -180,7 +180,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute right-0 top-full mt-2 w-[140px] bg-theme-sidebar border border-theme-border rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
+                            className="absolute right-0 top-full mt-2 w-[140px] bg-theme-panel border border-theme-border rounded-[16px] shadow-lg overflow-hidden z-50 py-2"
                           >
                             {[
                               { id: 'th', label: 'ไทย' },
@@ -189,7 +189,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
                               <button
                                 key={option.id}
                                 onClick={() => { setLang(option.id); setLangOpen(false); }}
-                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-theme-hover transition-colors cursor-pointer ${lang === option.id ? 'text-white bg-theme-hover/50' : 'text-theme-muted'}`}
+                                className={`mx-1 w-[calc(100%-8px)] text-left px-3 py-2 text-sm font-semibold flex items-center justify-between rounded-lg hover:bg-theme-hover transition-colors cursor-pointer ${lang === option.id ? 'bg-[#FFB65A] text-gray-900' : 'text-theme-primary'}`}
                               >
                                 <span>{option.label}</span>
                                 {lang === option.id && (
@@ -208,7 +208,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
 
                 {/* Empty State */}
                 {showNoResults && (
-                  <div className="flex flex-col items-center justify-center py-6 px-6 opacity-40">
+                  <div className="flex flex-col items-center justify-center py-6 px-6 opacity-60">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-theme-muted mb-3">
                       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                     </svg>
@@ -225,7 +225,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
               <div className="flex justify-end mt-4">
                 <button 
                   onClick={() => onSave(theme, lang)}
-                  className="bg-[#22C55E] hover:bg-green-600 text-white text-sm font-bold tracking-wide px-6 py-2 rounded-lg shadow-sm transition-colors cursor-pointer"
+                  className="bg-[#FFB65A] hover:bg-[#C59355] text-gray-900 text-sm font-bold tracking-wide px-6 py-2 rounded-lg shadow-sm transition-colors cursor-pointer"
                 >
                   บันทึก
                 </button>

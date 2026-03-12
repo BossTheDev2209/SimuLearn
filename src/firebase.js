@@ -3,13 +3,13 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore"; 
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCzkIdJqYmr4_NlVg3iZjB8TK8mM5ljDu4",
-  authDomain: "simulearnt.firebaseapp.com",
-  projectId: "simulearnt",
-  storageBucket: "simulearnt.firebasestorage.app",
-  messagingSenderId: "493681955651",
-  appId: "1:493681955651:web:c12c41a6ead64c18f255f6",
-  measurementId: "G-RTRVPV8LSR"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);

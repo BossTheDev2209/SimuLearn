@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from './firebase'; 
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { getSimulationTemplate } from "./simulations/SimulationRegistry.js";
 import LoadingSimulation from './components/LoadingSimulation';
 import Sidebar from './components/Sidebar';
 import PhysicsBoard from './components/PhysicsBoard';
@@ -110,16 +111,12 @@ function App() {
   }, [myUserId]);
 
   useEffect(() => {
-    // Apply theme changes to document whenever userPreferences changes, 
-    // ensuring it works across different accounts rather than relying on local storage.
-    if (userPreferences?.theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.body.style.backgroundColor = '#37353E';
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.style.backgroundColor = '#313338';
-    }
-  }, [userPreferences?.theme]);
+    if (userPreferences?.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [userPreferences?.theme]);
 
   const handleSaveSettings = async (newTheme, newLang) => {
     const newSettings = { theme: newTheme, lang: newLang };
@@ -164,33 +161,41 @@ function App() {
     setMessages((prev) => [...prev, { sender: 'user', text }]);
 
     try {
-      const res = await fetch(`https://simulearn-backend.onrender.com/api/generate-simulation`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          prompt: text, 
-          userId: myUserId
-        }),
-      });
-      const data = await res.json();
-      
-      await setDoc(doc(db, "simulations", newSimId), {
-        title: text,
-        userId: myUserId,
-        data: data,
-        createdAt: serverTimestamp()
-      });
+      const res = await fetch(`https://simulearn-backend.onrender.com/api/generate-simulation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: text, 
+          userId: myUserId
+        }),
+      });
+      const apiData = await res.json();    
+      const simType = apiData.type || apiData.topic_type || 'free_fall';
+      const template = getSimulationTemplate(simType);
+      const rawVariables = apiData.variables || apiData.calculated_variables || {};
+      const formattedData = {
+        simulationType: simType,
+        ai_description: apiData.description || apiData.ai_description,
+        ...template.parseData(rawVariables)
+      };
 
-      setSimulations((prev) =>
-        prev.map((s) => (s.id === newSimId ? { ...s, data } : s))
-      );
-    } catch (err) {
-      console.error("ยิง API ไม่ติดครับบอส:", err);
-      alert("เซิร์ฟเวอร์หลังบ้านบอสยังไม่ได้เปิดหรือเปล่าครับ?");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      await setDoc(doc(db, "simulations", newSimId), {
+        title: text,
+        userId: myUserId,
+        data: formattedData,
+        createdAt: serverTimestamp()
+      });
+
+      setSimulations((prev) =>
+        prev.map((s) => (s.id === newSimId ? { ...s, data: formattedData } : s))
+      );
+    } catch (err) {
+      console.error("ยิง API ไม่ติด:", err);
+      alert("เซิร์ฟเวอร์เปิดหรือยัง?");
+    } finally {
+      setIsLoading(false);
+    }
+};
 
   const handleNewSimulation = useCallback(() => {
     setActiveSimId(null);
@@ -255,9 +260,9 @@ function App() {
   }
 
   return (
-    <div className={`app-container relative flex w-full h-screen font-chakra overflow-hidden ${userPreferences?.theme === 'dark' ? 'dark bg-[#1E1F22] text-[#DBDEE1]' : 'bg-[#313338] text-[#DBDEE1]'}`}>
-      
-      {isLoading && <LoadingSimulation />}
+    <div className="app-container relative flex w-full h-screen font-chakra overflow-hidden bg-[#F2F3F5] text-gray-900 dark:bg-[#1E1F22] dark:text-[#DBDEE1] transition-colors duration-300">
+      
+      {isLoading && <LoadingSimulation />}
 
       <Sidebar
         simulations={simulations}

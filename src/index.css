@@ -2,32 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-theme-sidebar: #D9CFC7;
+  --bg-theme-main: #F9F8F6;
+  --bg-theme-panel: #FFFFFF; 
+  --bg-theme-hover: #E8E0D5; 
+  --text-theme-primary: #1E1F22;
+  --text-theme-muted: #6B7280;
+  
+  --border-theme-border: #E5E7EB;
+  --border-theme-border-hover: #D1D5DB;
+}
+
 .dark {
-  --bg-theme-sidebar: #37353E;
-  --bg-theme-panel: #37353E;
-  --bg-theme-main: #44444E;
-  --bg-theme-hover: #44444E;
-  --text-theme-primary: #D3DAD9;
-  --text-theme-muted: rgba(211, 218, 217, 0.6); /* #D3DAD9 at 60% opacity */
-  --border-theme-border: #715A5A;
-  --border-theme-border-hover: #715A5A;
+  --bg-theme-sidebar: #2B2D31;
+  --bg-theme-main: #313338;
+  --bg-theme-panel: #2B2D31;
+  --bg-theme-hover: #3F4147;
+  --text-theme-primary: #DBDEE1;
+  --text-theme-muted: #949BA4;
+  
+  --border-theme-border: #1E1F22;
+  --border-theme-border-hover: #3F4147;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #3F4147;
+  background-color: var(--border-theme-border);
   border-radius: 4px;
 }
 
-/* Control Panel slider */
 .control-slider {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: #3F4147;
+  background: var(--border-theme-border);
   outline: none;
   cursor: pointer;
 }
@@ -37,26 +49,12 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #F0A03E;
-  border: 2px solid #313338;
+  background: #FFB65A;
+  border: 2px solid var(--bg-theme-panel);
   box-shadow: 0 1px 3px rgba(0,0,0,0.5);
   cursor: pointer;
   transition: transform 0.15s ease;
 }
 .control-slider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
-}
-.control-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #F0A03E;
-  border: 2px solid #313338;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
-  cursor: pointer;
-}
-.control-slider::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
-  background: #3F4147;
 }
