@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-//อันนี้ผมให้ AI ทำ 100% เลยนะ
+
 const FONT = "'Chakra Petch', sans-serif";
 
 // Preset Colors 
@@ -17,7 +17,7 @@ const SHAPES = [
     key: 'rectangle',
     label: 'สี่เหลี่ยม',
     icon: (
-      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg width="30" height="30" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2.5">
         <rect x="8" y="8" width="20" height="20" rx="1.5" />
       </svg>
     ),
@@ -26,7 +26,7 @@ const SHAPES = [
     key: 'circle',
     label: 'วงกลม',
     icon: (
-      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg width="30" height="30" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2.5">
         <circle cx="18" cy="18" r="11" />
       </svg>
     ),
@@ -35,7 +35,7 @@ const SHAPES = [
     key: 'polygon-3',
     label: 'สามเหลี่ยม',
     icon: (
-      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg width="30" height="30" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2.5">
         <polygon points="18,7 30,29 6,29" />
       </svg>
     ),
@@ -57,8 +57,6 @@ export default function ObjectAppearancePicker({
   const popupRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
-  // Position relative to anchor — calculated ONCE on mount only,
-  // to avoid re-positioning jumps on every color/shape change.
   useEffect(() => {
     const el = getAnchor ? getAnchor() : null;
     if (!el) return;
@@ -77,10 +75,8 @@ export default function ObjectAppearancePicker({
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // empty — run once on mount only
+  }, []); 
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e) => {
       const el = getAnchor ? getAnchor() : null;
@@ -96,118 +92,62 @@ export default function ObjectAppearancePicker({
   const popup = (
     <div
       ref={popupRef}
-      style={{
-        position: 'fixed',
-        zIndex: 9999,
-        top: pos.top,
-        left: pos.left,
-        width: 262,
-        fontFamily: FONT,
-        animation: 'pickerPopIn 0.18s ease-out',
-      }}
+      style={{ top: pos.top, left: pos.left, fontFamily: FONT }}
+      className="fixed z-[9999] w-[262px] animate-[pickerPopIn_0.15s_ease-out]"
     >
       {/* Card */}
-      <div style={{
-        background: '#313338',
-        borderRadius: 14,
-        border: '1px solid #1E1F22',
-        boxShadow: '0 8px 28px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.2)',
-        padding: '20px 18px 18px 18px',
-        position: 'relative',
-      }}>
+      <div className="bg-theme-panel rounded-xl border border-theme-border shadow-xl p-[20px_18px_18px_18px] relative">
 
-        {/* ✕ close button — top-right, red */}
+        {/* ✕ close button */}
         <button
           onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: -14,
-            right: -14,
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            background: '#EF4444',
-            border: '2px solid white',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
-            zIndex: 10,
-            transition: 'background 0.15s',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#DC2626')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = '#EF4444')}
+          className="absolute -top-3.5 -right-3.5 w-9 h-9 rounded-full bg-[#EF4444] border-2 border-white dark:border-[#1E1F22] cursor-pointer flex items-center justify-center shadow-md z-10 hover:bg-[#DC2626] transition-colors"
           title="ปิด"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
 
         {/* ─── COLOR SECTION ─── */}
-        <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#DBDEE1', fontFamily: FONT }}>
+        <h4 className="m-0 mb-3 text-[14px] font-bold text-theme-primary">
           สีพื้นฐาน
         </h4>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, marginBottom: 16 }}>
+        <div className="grid grid-cols-6 gap-2 mb-4">
           {PRESET_COLORS.map((c) => (
             <button
               key={c}
               onClick={() => onColorChange(c)}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                backgroundColor: c,
-                // Always 3px border to prevent layout shifts on selection
-                border: color === c ? '3px solid #DBDEE1' : '3px solid transparent',
-                cursor: 'pointer',
-                transition: 'transform 0.12s',
-                boxShadow: color === c ? '0 0 0 1.5px rgba(219,222,225,0.4)' : '0 0 0 1.5px rgba(0,0,0,0.3)',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.12)')}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              style={{ backgroundColor: c }}
+              className={`w-7 h-7 rounded-full cursor-pointer transition-all duration-150 ring-offset-2 ring-offset-theme-panel hover:scale-110 
+                ${color === c ? 'ring-2 ring-theme-primary scale-110 shadow-sm' : 'ring-0'}
+              `}
               title={c}
             />
           ))}
         </div>
 
         {/* ─── DIVIDER ─── */}
-        <div style={{ borderTop: '1px solid #1E1F22', marginBottom: 14 }} />
+        <div className="border-t border-theme-border mb-3.5" />
 
         {/* ─── SHAPE SECTION ─── */}
-        <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#DBDEE1', fontFamily: FONT }}>
+        <h4 className="m-0 mb-3 text-[14px] font-bold text-theme-primary">
           รูปทรงพื้นฐาน
         </h4>
 
-        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+        <div className="flex gap-2 flex-wrap">
           {SHAPES.map((sh) => (
             <button
               key={sh.key}
               onClick={() => onShapeChange(sh.key)}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 8,
-                border: shape === sh.key ? '2px solid #F0A03E' : '2px solid #1E1F22',
-                backgroundColor: shape === sh.key ? '#3F4147' : '#2B2D31',
-                color: shape === sh.key ? '#F0A03E' : '#949BA4',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.12s',
-              }}
-              onMouseEnter={(e) => {
-                if (shape !== sh.key) e.currentTarget.style.borderColor = '#3F4147';
-                e.currentTarget.style.transform = 'scale(1.08)';
-              }}
-              onMouseLeave={(e) => {
-                if (shape !== sh.key) e.currentTarget.style.borderColor = '#1E1F22';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
+              className={`w-10 h-10 rounded-lg cursor-pointer flex items-center justify-center transition-all duration-150 border 
+                ${shape === sh.key 
+                  ? 'border-[#FFB65A] bg-[#FFB65A]/10 text-[#FFB65A] scale-105 shadow-sm' 
+                  : 'border-theme-border bg-theme-main text-theme-muted hover:border-[#FFB65A] hover:text-[#FFB65A] hover:scale-105'
+                }
+              `}
               title={sh.label}
             >
               {sh.icon}
@@ -218,23 +158,7 @@ export default function ObjectAppearancePicker({
         {/* ─── CONFIRM BUTTON ─── */}
         <button
           onClick={onConfirm || onClose}
-          style={{
-            marginTop: 20,
-            width: '100%',
-            padding: '10px 0',
-            backgroundColor: '#22C55E',
-            color: 'white',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: 15,
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'background-color 0.15s',
-            fontFamily: FONT,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#16A34A')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#22C55E')}
+          className="mt-5 w-full py-2.5 bg-[#FFB65A] text-gray-900 font-bold text-[15px] rounded-lg cursor-pointer transition-colors hover:bg-[#F0A03E] shadow-sm tracking-wide"
         >
           ยืนยัน
         </button>

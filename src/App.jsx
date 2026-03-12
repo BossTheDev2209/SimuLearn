@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { db } from './firebase';
+import { db, auth } from './firebase';
+import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { getSimulationTemplate } from "./simulations/SimulationRegistry.js";
 import LoadingSimulation from './components/LoadingSimulation';
 import Sidebar from './components/Sidebar';
-import PhysicsBoard from './components/PhysicsBoard';
+import SimulationWorkspace from './components/SimulationWorkspace/SimulationWorkspace.jsx';
 import ChatArea from './components/ChatArea';
 import SearchModal from './components/SearchModal';
 import SettingsModal from './components/SettingsModal';
@@ -15,6 +16,7 @@ function App() {
   const myUserName = localStorage.getItem("currentUserName") || "User";
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -24,13 +26,15 @@ function App() {
   const [simulations, setSimulations] = useState([]);
   const [activeSimId, setActiveSimId] = useState(null);
 
-  const [userPreferences, setUserPreferences] = useState({ theme: 'light', lang: 'th' });
+  const [userPreferences, setUserPreferences] = useState({ 
+    theme: localStorage.getItem('theme') || 'system', 
+    lang: 'th' 
+  });
 
   const saveTimeoutRef = useRef(null);
 
   const handleSaveControlState = useCallback((state) => {
     if (!activeSimId) return;
-    // Update local state so it doesn't wait for Firestore
     setSimulations(prev => prev.map(s => s.id === activeSimId ? { ...s, controlState: state } : s));
 
     if (myUserId && !myUserId.startsWith("guest_")) {
@@ -66,57 +70,113 @@ function App() {
             console.error("Save physics error:", err);
           }
         }
-      }, isMoving ? 100 : 2000); // 100ms delay state-only if moving, else 2s save-to-firebase
+      }, isMoving ? 100 : 2000); 
     }
   }, [activeSimId, myUserId]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!myUserId) return;
+      if (!myUserId.startsWith("guest_")) {
+        try {
+          const res = await fetch(`https://simulearn-backend.onrender.com/api/history/${myUserId}`);
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          const apiHistory = await res.json();
 
-    // Fetch History
-    try {
-      const q = query(
-        collection(db, "simulations"),
-        where("userId", "==", myUserId),
-        orderBy("createdAt", "desc")
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const docs = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+          // Guard: ถ้า API ไม่ได้ส่ง Array กลับมา (เช่น ส่ง error object หรือ null) ให้หยุดเลย
+          if (!Array.isArray(apiHistory)) {
+            console.warn("API ไม่ได้ส่ง Array กลับมา:", apiHistory);
+            return;
+          }
 
-      setSimulations(docs);
-    } catch (err) {
-      console.error("โหลดประวัติไม่ขึ้น", err);
-    }
+          const formattedSimulations = apiHistory.map((item) => {
+            const simType = item?.type || item?.topic_type || 'free_fall';
 
-    // Fetch Preferences
-    if (!myUserId.startsWith("guest_")) {
-      try {
-        const docRef = doc(db, "users", myUserId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().settings) {
-          setUserPreferences(docSnap.data().settings);
+            // 🌟 1. ไขคดีข้อมูลซ้ำ: เช็คก่อนว่าข้อมูลถูก Parse มาสมบูรณ์แล้วหรือยัง
+            let parsedData = null;
+            try {
+              if (item?.data?.objects) {
+                parsedData = item.data; // ถ้ามีของครบแล้ว ให้ดึงมาใช้ได้เลย! ห้ามจัดรูปแบบใหม่!
+              } else {
+                // ถ้าเป็นข้อมูลเก่า/ข้อมูลดิบ ค่อยเอามาเข้าแม่แบบ
+                const template = getSimulationTemplate(simType);
+                const rawVariables = item?.calculated_variables || item?.data?.variables || {};
+                parsedData = {
+                  simulationType: simType,
+                  ai_description: item?.ai_description || item?.data?.description || "",
+                  ...(template?.parseData(rawVariables) ?? {})
+                };
+              }
+            } catch (parseErr) {
+              console.warn("parse item failed, skipping data:", item?.id || item?._id, parseErr);
+              parsedData = null;
+            }
+
+            return {
+              id: item?.id || item?._id,
+              title: item?.title || "แบบจำลองของฉัน",
+              userId: item?.userId,
+              createdAt: item?.createdAt?._seconds ? new Date(item.createdAt._seconds * 1000) : new Date(item?.createdAt || Date.now()),
+              data: parsedData,
+              physicsState: item?.physicsState || null,
+              controlState: item?.controlState || null
+            };
+          });
+
+          formattedSimulations.sort((a, b) => b.createdAt - a.createdAt);
+          setSimulations(formattedSimulations);
+        } catch (err) {
+          console.error("โหลดประวัติจาก API ไม่ขึ้น:", err);
+        } finally {
+          setIsHistoryLoading(false); //
         }
-      } catch(e) { console.error("โหลดการตั้งค่าไม่ขึ้น", e) }
-    } else {
-      const localTheme = localStorage.getItem("theme") || 'light';
-      const localLang = localStorage.getItem("lang") || 'th';
-      setUserPreferences({ theme: localTheme, lang: localLang });
-    }
+
+        // Fetch Preferences
+        try {
+          const docRef = doc(db, "users", myUserId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().settings) {
+            const cloudSettings = docSnap.data().settings;
+            setUserPreferences(cloudSettings);
+            
+            if (cloudSettings.theme) localStorage.setItem("theme", cloudSettings.theme);
+            if (cloudSettings.lang) localStorage.setItem("lang", cloudSettings.lang);
+          }
+        } catch(e) { console.error("โหลดการตั้งค่าไม่ขึ้น", e) }
+      } else {
+        const localTheme = localStorage.getItem("theme") || 'light';
+        const localLang = localStorage.getItem("lang") || 'th';
+        setUserPreferences({ theme: localTheme, lang: localLang });
+      }
     };
 
     fetchData();
   }, [myUserId]);
 
   useEffect(() => {
-    if (userPreferences?.theme === 'dark') {
-      document.documentElement.classList.add('dark');
+    const root = document.documentElement;
+    const currentTheme = userPreferences?.theme || 'light';
+
+    const applyTheme = (isDark) => {
+      if (isDark) {
+        root.classList.add('dark');
+      } else {
+        const localTheme = localStorage.getItem("theme") || 'system';
+        const localLang = localStorage.getItem("lang") || 'th';
+        setUserPreferences({ theme: localTheme, lang: localLang });
+      }
+    };
+
+    if (currentTheme === 'system') {
+      const systemQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      applyTheme(systemQuery.matches);
+
+      const handleSystemChange = (e) => applyTheme(e.matches);
+      systemQuery.addEventListener('change', handleSystemChange);
+
+      return () => systemQuery.removeEventListener('change', handleSystemChange);
     } else {
-      document.documentElement.classList.remove('dark');
+      applyTheme(currentTheme === 'dark');
     }
   }, [userPreferences?.theme]);
 
@@ -124,6 +184,25 @@ function App() {
     const newSettings = { theme: newTheme, lang: newLang };
     setUserPreferences(newSettings);
     setIsSettingsOpen(false);
+
+    localStorage.setItem("theme", newTheme);
+    localStorage.setItem("lang", newLang);
+
+    const root = document.documentElement;
+    if (newTheme === 'dark') {
+      root.classList.add('dark');
+    } else if (newTheme === 'light') {
+      root.classList.remove('dark');
+    } else if (newTheme === 'system') {
+      const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (isSystemDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    }
+
+    window.dispatchEvent(new Event('storage'));
 
     if (myUserId && !myUserId.startsWith("guest_")) {
       try {
@@ -134,9 +213,6 @@ function App() {
       } catch (err) {
         console.error("บันทึกการตั้งค่าไม่สำเร็จ", err);
       }
-    } else {
-      localStorage.setItem("theme", newTheme);
-      localStorage.setItem("lang", newLang);
     }
   };
 
@@ -197,76 +273,103 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-};
+  };
 
-const handleNewSimulation = useCallback(() => {
-  setActiveSimId(null);
-  setMessages([]);
-  setIsInteracting(false);
-}, []);
+  const handleNewSimulation = useCallback(() => {
+    setActiveSimId(null);
+    setMessages([]);
+    setIsInteracting(false);
+  }, []);
 
-const handleSelectSimulation = useCallback((id) => {
-  setActiveSimId(id);
-  setIsSearchOpen(false);
-  const selected = simulations.find(s => s.id === id);
-  if (selected && selected.data) setIsInteracting(true);
-}, [simulations]);
+  const handleSelectSimulation = useCallback((id) => {
+    setActiveSimId(id);
+    setIsSearchOpen(false);
+    const selected = simulations.find(s => s.id === id);
+    if (selected && selected.data) setIsInteracting(true);
+  }, [simulations]);
 
-const handleDeleteSimulation = useCallback(async (id) => {
-  try {
-    await deleteDoc(doc(db, "simulations", id.toString()));
-    setSimulations((prev) => prev.filter((s) => s.id !== id));
-    if (activeSimId === id) handleNewSimulation();
-  } catch (err) {
-    console.error("ลบข้อมูลไม่สำเร็จ:", err);
-  }
-}, [activeSimId, handleNewSimulation]);
+  const handleDeleteSimulation = useCallback(async (id) => {
+    try {
+      await deleteDoc(doc(db, "simulations", id.toString()));
+      setSimulations((prev) => prev.filter((s) => s.id !== id));
+      if (activeSimId === id) handleNewSimulation();
+    } catch (err) {
+      console.error("ลบข้อมูลไม่สำเร็จ:", err);
+    }
+  }, [activeSimId, handleNewSimulation]);
 
-const handleRenameSimulation = useCallback(async (id, newTitle) => {
-  if (!newTitle.trim()) return;
-  try {
-    await updateDoc(doc(db, "simulations", id.toString()), {
-      title: newTitle.trim()
-    });
-    setSimulations((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, title: newTitle.trim() } : s))
-    );
-  } catch (err) {
-    console.error("เปลี่ยนชื่อไม่สำเร็จ:", err);
-  }
-}, []);
+  const handleRenameSimulation = useCallback(async (id, newTitle) => {
+    if (!newTitle.trim()) return;
+    try {
+      await updateDoc(doc(db, "simulations", id.toString()), {
+        title: newTitle.trim()
+      });
+      setSimulations((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, title: newTitle.trim() } : s))
+      );
+    } catch (err) {
+      console.error("เปลี่ยนชื่อไม่สำเร็จ:", err);
+    }
+  }, []);
 
-const handleShareSimulation = useCallback((id) => {
-  const sim = simulations.find((s) => s.id === id);
-  if (!sim) return;
-  const shareText = `SimuLearn — ${sim.title}\n${window.location.origin}/?sim=${sim.id}`;
-  navigator.clipboard.writeText(shareText).then(() => alert("ก๊อปปี้ลิงก์แล้ว!"));
-}, [simulations]);
+  const handleShareSimulation = useCallback((id) => {
+    const sim = simulations.find((s) => s.id === id);
+    if (!sim) return;
+    const shareText = `SimuLearn — ${sim.title}\n${window.location.origin}/?sim=${sim.id}`;
+    navigator.clipboard.writeText(shareText).then(() => alert("ก๊อปปี้ลิงก์แล้ว!"));
+  }, [simulations]);
 
-const handleOpenSearch = useCallback(() => setIsSearchOpen(true), []);
-const handleCloseSearch = useCallback(() => setIsSearchOpen(false), []);
+  const handleOpenSearch = useCallback(() => setIsSearchOpen(true), []);
+  const handleCloseSearch = useCallback(() => setIsSearchOpen(false), []);
 
-useEffect(() => {
-  const handleKeyDown = (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault();
-      setIsSearchOpen((prev) => !prev);
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      localStorage.setItem("currentUserId", user.uid);
+      localStorage.setItem("currentUserName", user.displayName || "User");
+      window.location.reload(); 
+    } catch (error) {
+      console.error("ล็อกอิน Google ไม่สำเร็จ:", error);
+      alert("เกิดข้อผิดพลาดในการล็อกอินด้วย Google ครับ");
     }
   };
-  document.addEventListener('keydown', handleKeyDown);
-  return () => document.removeEventListener('keydown', handleKeyDown);
-}, []);
 
-if (!myUserId) {
-  return <LoginPage />;
-}
+  const handleGuestLogin = () => {
+    localStorage.setItem("currentUserId", "guest_" + Date.now());
+    localStorage.setItem("currentUserName", "Guest User");
+    window.location.reload();
+  };
 
-return (
+  if (!myUserId) {
+    return (
+      <LoginPage 
+        onGoogleLogin={handleGoogleLogin} 
+        onGuestLogin={handleGuestLogin}
+        onEmailLogin={() => alert("ระบบเข้าสู่ระบบด้วย Email กำลังพัฒนาครับ!")}
+      />
+    );
+  }
+
+  return (
     <div className="app-container relative flex w-full h-screen font-chakra overflow-hidden bg-[#F2F3F5] text-gray-900 dark:bg-[#1E1F22] dark:text-[#DBDEE1] transition-colors duration-300">
       
       {isLoading && <LoadingSimulation />}
 
       <Sidebar
+        isLoading={isHistoryLoading}
         simulations={simulations}
         activeSimId={activeSimId}
         userName={myUserName}
@@ -281,23 +384,34 @@ return (
         onHomeClick={handleNewSimulation}
       />
 
-      <div className="flex-1 relative w-full h-full flex flex-col">
-        <PhysicsBoard
-          key={activeSim?.id || 'empty'}
-          activeSim={activeSim}
-          isInteracting={isInteracting}
-          onSaveControlState={handleSaveControlState}
-          onSavePhysicsState={handleSavePhysicsState}
-        />
+      <div className="flex-1 relative w-full h-full">
         
-        {(!activeSim || !activeSim.data) && (
-          <ChatArea
-            messages={messages}
-            onSendMessage={handleSend}
-            setIsInteracting={setIsInteracting}
+        {/* Layer 0: กระดานจำลองและโลโก้ (อยู่เป็นพื้นหลังเสมอ) */}
+        <div className="absolute inset-0 z-0">
+          <SimulationWorkspace
+            key={activeSim?.id || 'empty'}
+            activeSim={activeSim}
+            isInteracting={isInteracting}
+            onSaveControlState={handleSaveControlState}
+            onSavePhysicsState={handleSavePhysicsState}
           />
+        </div>
+        
+        {/* Layer 1: แชท (ลอยอยู่ด้านหน้า และยอมให้กดทะลุไปข้างหลังได้ในบางจังหวะ) */}
+        {(!activeSim || !activeSim.data) && (
+          <div className={`absolute inset-0 z-10 flex flex-col pointer-events-none ${isLoading ? 'bg-white/40 dark:bg-black/40 backdrop-blur-[2px]' : ''}`}>
+            <div className="flex-1 pointer-events-auto">
+              <ChatArea
+                messages={messages}
+                onSendMessage={handleSend}
+                setIsInteracting={setIsInteracting}
+              />
+            </div>
+          </div>
         )}
       </div>
+
+      {/* โมดอลต่างๆ วางไว้ชั้นนอกสุดของแอป */}
       <SearchModal
         isOpen={isSearchOpen}
         onClose={handleCloseSearch}
