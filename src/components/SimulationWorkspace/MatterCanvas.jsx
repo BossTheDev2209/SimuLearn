@@ -1,13 +1,14 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import Matter from 'matter-js';
 
 // 🌟 รับค่า activeTool และ spawnConfig เข้ามาใช้
-export default function MatterCanvas({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig }) {
+const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, timeStateRef, setIsPlaying }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const bodyMap = useRef(new Map()); 
   const restoredBodiesRef = useRef(new Set());
   const onPhysicsChangeRef = useRef(onPhysicsChange);
+  const simStateRef = useRef(simState); // keep a live ref so engine init can read latest simState
 
   // 🌟 ตัวดักจับเมาส์สำหรับพรีวิว
   const mouseRef = useRef({ x: -1000, y: -1000 });
@@ -15,6 +16,10 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
   useEffect(() => {
     onPhysicsChangeRef.current = onPhysicsChange;
   }, [onPhysicsChange]);
+
+  useEffect(() => {
+    simStateRef.current = simState;
+  }, [simState]);
 
   const { w, h } = size;
   const basePixelsPerUnit = 50; 
@@ -38,12 +43,27 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
   }, []);
 
   // 1. Initialize engine
+  const [engineResetToken, setEngineResetToken] = useState(0);
+  // Pending action after engine reset (e.g. fast-forward to a target time)
+  const pendingActionRef = useRef(null);
+  // Token to force re-sync simState -> engine bodies
+  const [simSyncToken, setSimSyncToken] = useState(0);
+
+  useImperativeHandle(ref, () => ({
+    resetSimulation: (pendingAction) => {
+      pendingActionRef.current = pendingAction || null;
+      setEngineResetToken(prev => prev + 1);
+    }
+  }));
+
   useEffect(() => {
     const engine = Matter.Engine.create({
       positionIterations: 16,
       velocityIterations: 12
     });
     engineRef.current = engine;
+    bodyMap.current.clear();
+    restoredBodiesRef.current.clear();
     
     const ground = Matter.Bodies.rectangle(0, -20, 10000, 40, { 
       isStatic: true,
@@ -52,21 +72,90 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
     });
     Matter.Composite.add(engine.world, ground);
 
+    // Force re-sync bodies from simState after engine rebuild
+    setSimSyncToken(prev => prev + 1);
+
+    // Handle pending action (e.g. fast-forward to a target time after a reset)
+    // We use a microtask so that the simState sync effect has a chance to add bodies first.
+    if (pendingActionRef.current) {
+      const action = pendingActionRef.current;
+      pendingActionRef.current = null;
+      // Use setTimeout to let React flush the simSyncToken update and re-add bodies
+      setTimeout(() => {
+        if (action.targetTime != null && action.targetTime > 0) {
+          const TIME_STEP_MS = 1000 / 120;
+          const numSteps = Math.ceil((action.targetTime * 1000) / TIME_STEP_MS);
+          for (let i = 0; i < numSteps; i++) {
+            Matter.Engine.update(engine, TIME_STEP_MS);
+          }
+          if (timeStateRef?.current) {
+            timeStateRef.current.time = action.targetTime;
+            timeStateRef.current.targetTime = null;
+            timeStateRef.current.isPlaying = false;
+          }
+          setIsPlaying(false);
+        }
+      }, 50); // small delay so bodies are synced first
+    }
+
     let raf;
-    let lastSave = performance.now();
     let lastTime = performance.now();
     let accumulator = 0;
-    const TIME_STEP = 1000 / 120; 
+    const TIME_STEP = 1000 / 120; // internal physics step ~8.33ms
+
+    let lastSave = performance.now();
 
     const loop = (now) => {
-      let delta = now - lastTime;
-      if (delta > 100) delta = 100; 
+      let deltaBrowser = now - lastTime;
+      if (deltaBrowser > 100) deltaBrowser = 100;
       lastTime = now;
-      accumulator += delta;
 
-      while (accumulator >= TIME_STEP) {
-        Matter.Engine.update(engine, TIME_STEP);
-        accumulator -= TIME_STEP;
+      if (timeStateRef && timeStateRef.current) {
+         if (timeStateRef.current.isPlaying) {
+             const tScale = timeStateRef.current.timeScale || 1;
+             
+             // === INSTANT FAST FORWARD to targetTime ===
+             if (timeStateRef.current.targetTime !== null) {
+                  const targetTime = timeStateRef.current.targetTime;
+                  if (targetTime > timeStateRef.current.time) {
+                      // Instantly simulate all needed steps
+                      const jumpAmount = targetTime - timeStateRef.current.time;
+                      const numSteps = Math.ceil((jumpAmount * 1000) / TIME_STEP);
+                      for (let i = 0; i < numSteps; i++) {
+                         Matter.Engine.update(engine, TIME_STEP);
+                      }
+                      timeStateRef.current.time = targetTime;
+                      timeStateRef.current.targetTime = null;
+                      timeStateRef.current.isPlaying = false;
+                      setIsPlaying(false);
+                      accumulator = 0;
+                  } else {
+                      // Target already reached or equal, just stop
+                      timeStateRef.current.targetTime = null;
+                      timeStateRef.current.isPlaying = false;
+                      setIsPlaying(false);
+                  }
+             } else {
+                 // Normal playback
+                 accumulator += deltaBrowser * tScale;
+                 let stepsThisFrame = 0;
+                 while (accumulator >= TIME_STEP && stepsThisFrame < 20) {
+                    Matter.Engine.update(engine, TIME_STEP);
+                    accumulator -= TIME_STEP;
+                    stepsThisFrame++;
+                 }
+                 // Clamp leftover accumulator to avoid spiral
+                 if (accumulator > TIME_STEP * 5) accumulator = 0;
+                 
+                 timeStateRef.current.time += (deltaBrowser * tScale) / 1000;
+             }
+         }
+      } else {
+         accumulator += deltaBrowser;
+         while (accumulator >= TIME_STEP) {
+           Matter.Engine.update(engine, TIME_STEP);
+           accumulator -= TIME_STEP;
+         }
       }
 
       raf = requestAnimationFrame(loop);
@@ -97,17 +186,19 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
       cancelAnimationFrame(raf);
       Matter.Engine.clear(engine);
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engineResetToken]);
 
-  // 2. Sync simState -> Engine
+  // 2. Sync simState -> Engine (also re-runs when simSyncToken bumps after reset)
   useEffect(() => {
     const engine = engineRef.current;
-    if (!engine || !simState) return;
+    const currentSimState = simStateRef.current || simState;
+    if (!engine || !currentSimState) return;
 
-    engine.gravity.y = -(simState.gravity / 9.8); 
+    engine.gravity.y = -(currentSimState.gravity / 9.8); 
     
     const currentSpawnedIds = new Set(
-      simState.objects.filter((o) => o.isSpawned).map((o) => o.id)
+      (currentSimState.objects || []).filter((o) => o.isSpawned).map((o) => o.id)
     );
 
     for (const [id, body] of bodyMap.current.entries()) {
@@ -117,7 +208,7 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
       }
     }
 
-    simState.objects.forEach(obj => {
+    (currentSimState.objects || []).forEach(obj => {
       if (!obj.isSpawned) return;
 
       let body = bodyMap.current.get(obj.id);
@@ -128,7 +219,6 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
       }
 
       if (!body) {
-        // 🌟 แก้ให้รับพิกัดแกน x, y ที่คลิกเสกของมาเลย 
         const startX = obj.position?.x !== undefined ? obj.position.x : ((Math.random() - 0.5) * 0.1);
         const startY = obj.position?.y !== undefined ? obj.position.y : (obj.values?.height !== undefined ? obj.values.height : 10);
         const s = obj.size !== undefined ? obj.size : 1; 
@@ -165,7 +255,8 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
         bodyMap.current.set(obj.id, newBody);
         body = newBody;
 
-        if (initialPhysics?.bodies?.[obj.id] && !restoredBodiesRef.current.has(obj.id)) {
+        // Only restore saved positions on first load, NOT after a restart
+        if (simSyncToken === 0 && initialPhysics?.bodies?.[obj.id] && !restoredBodiesRef.current.has(obj.id)) {
             const saved = initialPhysics.bodies[obj.id];
             Matter.Body.setPosition(body, saved.position);
             Matter.Body.setAngle(body, saved.angle);
@@ -186,10 +277,10 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
            body.restitution = obj.values.restitution;
          }
       }
-      body.frictionAir = simState.airResistance ? 0.05 : 0;
+      body.frictionAir = currentSimState.airResistance ? 0.05 : 0;
     });
 
-  }, [simState, initialPhysics?.bodies]);
+  }, [simState, initialPhysics?.bodies, simSyncToken]);
 
   // 3. Render Canvas
   useEffect(() => {
@@ -286,4 +377,6 @@ export default function MatterCanvas({ size, offset, zoom, simState, initialPhys
       className="absolute inset-0 pointer-events-none z-10"
     />
   );
-}
+});
+
+export default MatterCanvas;

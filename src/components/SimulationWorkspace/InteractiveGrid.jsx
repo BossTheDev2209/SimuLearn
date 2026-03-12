@@ -185,6 +185,21 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
         <line x1={0} y1={axisXY} x2={w} y2={axisXY} className="stroke-gray-400 dark:stroke-[#B5BAC1]" strokeWidth={4} />
         <line x1={axisYX} y1={0} x2={axisYX} y2={h} className="stroke-gray-400 dark:stroke-[#B5BAC1]" strokeWidth={1.8} />
         <circle cx={ox} cy={oy} r={3.5} className="fill-gray-400 dark:fill-[#B5BAC1]" />
+        {/* Grid axis labels (Desmos-style numbers) */}
+        {labels.map((label) => (
+          <text
+            key={label.key}
+            x={label.props.x}
+            y={label.props.y}
+            textAnchor={label.props.textAnchor}
+            className="fill-gray-500 dark:fill-[#949BA4]"
+            fontSize={11}
+            fontFamily="Inter, system-ui, sans-serif"
+            style={{ userSelect: 'none', pointerEvents: 'none' }}
+          >
+            {label.props.children}
+          </text>
+        ))}
       </svg>
       {typeof children === 'function' ? children({ size, offset, zoom }) : children}
     </div>

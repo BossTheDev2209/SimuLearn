@@ -126,11 +126,28 @@ export default function Sidebar({
             <div className={`overflow-hidden transition-all duration-300 flex-1 ${isHistoryOpen ? 'max-h-full opacity-100' : 'max-h-0 opacity-0'}`}>
               <ul className="space-y-[2px] text-[14px] font-medium h-full overflow-y-auto custom-scrollbar" ref={menuRef}>
                 
-                {/* 🌟 แสดง Skeleton ตอนกำลังโหลด (ไม่แตะ Design อื่นเลย) */}
+                {/* 🌟 แสดง Skeleton ตอนกำลังโหลด — shimmer animation */}
                 {isHistoryLoading ? (
                   <div className="flex flex-col gap-2 mt-1 px-1">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div key={i} className="h-8 w-full bg-black/5 dark:bg-[#3F4147] rounded-md animate-pulse"></div>
+                    {[
+                      { w: '85%' },
+                      { w: '65%' },
+                      { w: '92%' },
+                      { w: '55%' },
+                      { w: '75%' },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center h-10 px-2 rounded-lg">
+                        {/* ไอคอนกลมๆ หน้าชื่อ */}
+                        <div 
+                          className="w-5 h-5 rounded-full bg-gray-300 dark:bg-[#3F4147] animate-pulse shrink-0"
+                          style={{ animationDelay: `${i * 100}ms` }}
+                        />
+                        {/* แท่งข้อความยาวๆ */}
+                        <div
+                          className="h-3.5 bg-gray-300 dark:bg-[#3F4147] rounded-full animate-pulse ml-3"
+                          style={{ width: item.w, animationDelay: `${i * 100}ms` }}
+                        />
+                      </div>
                     ))}
                   </div>
                 ) : simulations.length === 0 ? (

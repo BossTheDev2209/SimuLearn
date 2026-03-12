@@ -1,12 +1,12 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ControlPanel from '../ControlPanel'; 
 
 import InteractiveGrid from './InteractiveGrid';
 import MatterCanvas from './MatterCanvas';
+import Timebar from './Timebar';
 
-// 🌟 Component แยกที่นำกลับมาใช้ซ้ำได้ (ตามคำสั่งบอส!)
-// ดีไซน์ดึงมาจาก Tailwind มาตรฐานที่ใช้กับ Control Panel
+// 🌟 Component แยกที่นำกลับมาใช้ซ้ำได้
 const SharedSlider = ({ label, value, min, max, step, onChange }) => (
   <div className="flex items-center gap-2 px-1">
     {label && <span className="text-xs font-semibold text-theme-muted">{label}</span>}
@@ -25,6 +25,22 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const shouldHideLogo = isInteracting || activeSim !== null;
   const [simState, setSimState] = useState(null);
 
+  // --- Timebar integration states ---
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStartedOnce, setHasStartedOnce] = useState(false); 
+  const [timeScale, setTimeScale] = useState(1);
+  const [displayTime, setDisplayTime] = useState(0);
+
+  // --- State สำหรับ ถังขยะ (Clear All) ---
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+
+  // Use a ref for continuous time updates without causing top-level re-renders
+  const timeStateRef = useRef({ time: 0, isPlaying: false, timeScale: 1, targetTime: null });
+
+  // Update ref from state
+  useEffect(() => { timeStateRef.current.isPlaying = isPlaying; }, [isPlaying]);
+  useEffect(() => { timeStateRef.current.timeScale = timeScale; }, [timeScale]);
+
   const [isToolbarOpen, setIsToolbarOpen] = useState(true);
   const [activeTool, setActiveTool] = useState('cursor');
 
@@ -38,11 +54,51 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
 
   const cameraRef = useRef(activeSim?.physicsState?.camera || { zoom: 1, offset: {x:0, y:0} });
   const bodiesRef = useRef(activeSim?.physicsState?.bodies || {});
+  const matterCanvasRef = useRef(null); 
 
   const handleControlUpdate = useCallback((state) => {
     setSimState(state);
     if (onSaveControlState) onSaveControlState(state);
   }, [onSaveControlState]);
+
+  // Handle local UI rendering for the time counter (optimizing re-renders)
+  useEffect(() => {
+    let animationFrameId;
+    const updateTimeDisplay = () => {
+      setDisplayTime(timeStateRef.current.time);
+      animationFrameId = requestAnimationFrame(updateTimeDisplay);
+    };
+    animationFrameId = requestAnimationFrame(updateTimeDisplay);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
+
+  const handleTogglePlay = () => {
+    if (!hasStartedOnce) setHasStartedOnce(true);
+    const next = !timeStateRef.current.isPlaying;
+    timeStateRef.current.isPlaying = next; // Immediate ref update for animation loop
+    setIsPlaying(next); // React state for UI
+  };
+
+  const handleRestart = () => {
+    timeStateRef.current.time = 0;
+    timeStateRef.current.targetTime = null;
+    timeStateRef.current.isPlaying = false;
+    setIsPlaying(false);
+    setDisplayTime(0);
+    if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
+  };
+
+  const handleSeek = (val) => {
+    timeStateRef.current.isPlaying = false;
+    setIsPlaying(false);
+    
+    timeStateRef.current.time = val;
+    setDisplayTime(val);
+
+    if (matterCanvasRef.current) {
+      matterCanvasRef.current.resetSimulation({ targetTime: val, instant: true });
+    }
+  };
 
   const handleCameraChange = useCallback((camera) => {
     cameraRef.current = camera;
@@ -56,7 +112,29 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     }
   }, [onSavePhysicsState]);
 
-  // 🌟 รวมระบบเสกของ (Add) และ ลบของ (Erase) เข้าด้วยกัน
+  // ฟังก์ชันดักจับการกด Toolbar (ถ้าเป็นถังขยะให้เปิด Modal แทนการสลับ Tool)
+  const handleToolClick = (toolId) => {
+    if (toolId === 'clearAll') {
+      setIsClearModalOpen(true);
+    } else {
+      setActiveTool(toolId);
+    }
+  };
+
+  // ฟังก์ชันยืนยันการลบ
+  const handleClearAllConfirm = () => {
+    setSimState(prev => {
+      const currentState = prev || { gravity: 9.8, airResistance: false, objects: [] };
+      const newState = {
+         ...currentState,
+         objects: [] 
+      };
+      if (onSaveControlState) onSaveControlState(newState);
+      return newState;
+    });
+    setIsClearModalOpen(false);
+  };
+
   const handleGridClick = useCallback((wx, wy) => {
     if (activeTool === 'add') {
       const newObj = {
@@ -80,7 +158,6 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       });
 
     } else if (activeTool === 'erase') {
-      // 🌟 ระบบลบวัตถุ: หาว่าคลิกโดนชิ้นไหน แล้วเตะออกจาก State เลย!
       const currentObjects = simState?.objects || [];
       const currentBodies = bodiesRef.current || {};
       
@@ -88,7 +165,6 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       let minDistance = Infinity;
 
       for (const obj of currentObjects) {
-         // ดึงพิกัดล่าสุดที่คำนวณจากฟิสิกส์ (ไม่ใช่พิกัดตอนเกิด)
          const pos = currentBodies[obj.id]?.position || obj.position;
          if (!pos) continue;
          
@@ -96,7 +172,6 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
          const dy = wy - pos.y;
          const dist = Math.sqrt(dx*dx + dy*dy);
          
-         // รัศมีการคลิก (Hitbox) อิงตามขนาดวัตถุ ให้คลิกง่ายๆ
          if (dist < (obj.size || 1) && dist < minDistance) {
             minDistance = dist;
             targetId = obj.id;
@@ -107,7 +182,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
          setSimState(prev => {
             const newState = {
                ...prev,
-               objects: prev.objects.filter(o => o.id !== targetId) // 🗑️ ลบออกจาก State จริงๆ!
+               objects: prev.objects.filter(o => o.id !== targetId)
             };
             if (onSaveControlState) onSaveControlState(newState);
             return newState;
@@ -122,7 +197,9 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     { id: 'add', title: 'เพิ่มวัตถุ (A)', icon: <><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></> },
     { id: 'erase', title: 'ลบวัตถุ (E)', icon: <><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></> },
     { id: 'velocity', title: 'เวกเตอร์ความเร็ว', color: 'text-blue-500', icon: <><path d="M7 7h10v10"/><path d="M7 17 17 7"/></> },
-    { id: 'force', title: 'เวกเตอร์แรง', color: 'text-red-500', icon: <><path d="M7 7h10v10"/><path d="M7 17 17 7"/></> }
+    { id: 'force', title: 'เวกเตอร์แรง', color: 'text-red-500', icon: <><path d="M7 7h10v10"/><path d="M7 17 17 7"/></> },
+    { type: 'divider' }, // ตัวคั่น
+    { id: 'clearAll', title: 'ลบวัตถุทั้งหมด', color: 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30', icon: <><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></> }
   ];
 
 return (
@@ -149,13 +226,24 @@ return (
           </div>
 
           <div className="flex-1 flex min-h-0 px-6 pb-6 gap-4">
-            <div className="h-full rounded-2xl overflow-hidden border border-theme-border shadow-sm bg-theme-panel z-20 w-[280px] shrink-0">
-              <ControlPanel 
-                key={`${activeSim.id}-${simState?.objects?.length || 0}`} 
-                initialState={simState || activeSim.controlState || activeSim.data} 
-                simulationType={activeSim.simulationType || activeSim.data?.simulationType || 'default'} 
-                onUpdate={handleControlUpdate} 
-              />
+            <div className="h-full rounded-2xl overflow-hidden border border-theme-border shadow-sm bg-theme-panel z-20 w-[280px] shrink-0 relative">
+              {/* Properties locked overlay before first Play */}
+              {!hasStartedOnce && (
+                 <div className="absolute inset-0 z-50 bg-black/5 dark:bg-white/5 backdrop-blur-[1px] flex items-center justify-center p-4 text-center select-none pointer-events-none transition-all duration-300">
+                    <div className="bg-white/90 dark:bg-black/90 px-4 py-2 rounded-xl shadow-lg border border-theme-border flex flex-col items-center">
+                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-red-500 mb-1"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                       <span className="text-sm font-bold text-red-500">กด Play ก่อนเริ่มแก้ไข</span>
+                    </div>
+                 </div>
+              )}
+              <div className={`h-full ${!hasStartedOnce ? 'opacity-50 pointer-events-none' : ''}`}>
+                <ControlPanel 
+                  key={`${activeSim.id}-${simState?.objects?.length || 0}`} 
+                  initialState={simState || activeSim.controlState || activeSim.data} 
+                  simulationType={activeSim.simulationType || activeSim.data?.simulationType || 'default'} 
+                  onUpdate={handleControlUpdate} 
+                />
+              </div>
             </div>
 
             <div className="flex-1 rounded-2xl overflow-hidden border border-theme-border bg-white dark:bg-[#2B2D31] relative shadow-sm">
@@ -169,14 +257,21 @@ return (
                   style={{ width: '40px', maxHeight: isToolbarOpen ? '500px' : '40px' }} 
                 >
                   <div className={`flex flex-col items-center gap-1 w-full transition-all duration-300 overflow-hidden ${isToolbarOpen ? 'opacity-100 h-auto pb-2' : 'opacity-0 h-0 m-0 pb-0'}`}>
-                     {tools.map((tool) => (
-                       <button
-                         key={tool.id} onClick={() => setActiveTool(tool.id)} title={tool.title}
-                         className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all flex-shrink-0 ${activeTool === tool.id ? 'bg-white dark:bg-[#1E1F22] shadow-sm text-theme-primary' : 'text-theme-secondary hover:bg-[#D9CFC7] dark:hover:bg-[#3F4147] hover:text-theme-primary'} ${tool.color || ''}`}
-                       >
-                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">{tool.icon}</svg>
-                       </button>
-                     ))}
+                     {tools.map((tool, idx) => {
+                       if (tool.type === 'divider') {
+                         return <div key={`div-${idx}`} className="w-6 h-[1px] bg-theme-border my-1 flex-shrink-0"></div>;
+                       }
+                       return (
+                         <button
+                           key={tool.id} 
+                           onClick={() => handleToolClick(tool.id)} 
+                           title={tool.title}
+                           className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all flex-shrink-0 ${activeTool === tool.id ? 'bg-white dark:bg-[#1E1F22] shadow-sm text-theme-primary' : 'text-theme-secondary hover:bg-[#D9CFC7] dark:hover:bg-[#3F4147] hover:text-theme-primary'} ${tool.color || ''}`}
+                         >
+                           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">{tool.icon}</svg>
+                         </button>
+                       );
+                     })}
                      <div className="w-6 h-[1px] bg-theme-border my-1 flex-shrink-0"></div>
                   </div>
                   <button onClick={() => setIsToolbarOpen(!isToolbarOpen)} className="w-8 h-8 flex items-center justify-center rounded-lg text-theme-secondary hover:text-theme-primary hover:bg-[#D9CFC7] dark:hover:bg-[#3F4147] transition-colors flex-shrink-0 cursor-pointer" title={isToolbarOpen ? "พับเครื่องมือ" : "ขยายเครื่องมือ"}>
@@ -184,7 +279,7 @@ return (
                   </button>
                 </div>
 
-                {/* 🌟 กล่องตั้งค่าเสกวัตถุ (จะโผล่มาตอนเลือก Add) */}
+                {/* 🌟 กล่องตั้งค่าเสกวัตถุ */}
                 <AnimatePresence>
                   {activeTool === 'add' && (
                     <motion.div
@@ -203,7 +298,6 @@ return (
 
                       <div className="w-[1px] h-6 bg-theme-border"></div>
 
-                      {/* 🌟 ใช้ SharedSlider แทน input ดิบๆ */}
                       <SharedSlider 
                         label="ขนาด:" 
                         min="0.5" max="4" step="0.1" 
@@ -228,9 +322,30 @@ return (
 
               </div>
 
+              {/* Timebar — same level as toolbar */}
+              <div className="absolute top-4 right-4 z-50 pointer-events-auto">
+                <Timebar 
+                  isPlaying={isPlaying}
+                  timeScale={timeScale}
+                  displayTime={displayTime}
+                  onTogglePlay={handleTogglePlay}
+                  onRestart={handleRestart}
+                  onTimeScaleChange={setTimeScale}
+                  onSeek={handleSeek}
+                />
+              </div>
+
               <InteractiveGrid initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange} activeTool={activeTool} onGridClick={handleGridClick}>
                 {({ size, offset, zoom }) => (
-                  <MatterCanvas size={size} offset={offset} zoom={zoom} simState={simState} initialPhysics={activeSim.physicsState} onPhysicsChange={handlePhysicsChange} activeTool={activeTool} spawnConfig={spawnConfig} />
+                  <MatterCanvas 
+                    ref={matterCanvasRef}
+                    size={size} offset={offset} zoom={zoom} 
+                    simState={simState} initialPhysics={activeSim.physicsState} 
+                    onPhysicsChange={handlePhysicsChange} activeTool={activeTool} 
+                    spawnConfig={spawnConfig}
+                    timeStateRef={timeStateRef}
+                    setIsPlaying={setIsPlaying}
+                  />
                 )}
               </InteractiveGrid>
 
@@ -238,6 +353,45 @@ return (
           </div>
         </motion.div>
       )}
+
+      {/* 🌟 Modal ยืนยันการลบทั้งหมด */}
+      <AnimatePresence>
+        {isClearModalOpen && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-[#313338] rounded-2xl shadow-2xl p-6 w-[320px] border border-theme-border font-['Chakra_Petch']"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-500 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </div>
+                <h3 className="text-[18px] font-bold text-gray-900 dark:text-white mb-2">ยืนยันการเคลียร์พื้นที่?</h3>
+                <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-6">
+                  วัตถุทั้งหมดในแบบจำลองจะถูกลบทิ้ง<br/>และไม่สามารถกู้คืนได้
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button 
+                    onClick={() => setIsClearModalOpen(false)} 
+                    className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-[#3F4147] dark:hover:bg-[#4d5057] text-gray-700 dark:text-gray-200 rounded-xl font-bold transition-colors cursor-pointer"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button 
+                    onClick={handleClearAllConfirm} 
+                    className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold transition-colors shadow-sm cursor-pointer"
+                  >
+                    ลบทิ้ง
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
