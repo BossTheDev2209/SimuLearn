@@ -66,18 +66,50 @@ function App() {
        }, isMoving ? 100 : 2000); // 100ms delay state-only if moving, else 2s save-to-firebase
     }
   }, [activeSimId, myUserId]);
-
   useEffect(() => {
     const fetchData = async () => {
       if (!myUserId) return;
-      
-      // Fetch History
+      if (!myUserId.startsWith("guest_")) {
+        try {
+          const res = await fetch(`https://simulearn-backend.onrender.com/api/history/${myUserId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const formattedData = data.map(item => ({
+              id: item.id,
+              title: item.original_prompt,
+              createdAt: item.timestamp,
+              data: {
+                type: item.topic_type,
+                variables: item.calculated_variables,
+                description: item.ai_description
+              }
+            }));
+            setSimulations(formattedData);
+            console.log("📜 ประวัติโหลดผ่าน API สำเร็จ!");
+          }
+        } catch (err) {
+          console.error("โหลดประวัติไม่ขึ้นผ่าน API", err);
+        }
+      }
       try {
-        const q = query(
-          collection(db, "simulations"), 
-          where("userId", "==", myUserId),
-          orderBy("createdAt", "desc")
-        );
+        if (!myUserId.startsWith("guest_")) {
+          const docRef = doc(db, "users", myUserId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().settings) {
+            setUserPreferences(docSnap.data().settings);
+          }
+        } else {
+          const localTheme = localStorage.getItem("theme") || 'light';
+          const localLang = localStorage.getItem("lang") || 'th';
+          setUserPreferences({ theme: localTheme, lang: localLang });
+        }
+      } catch(e) {
+        console.error("โหลดการตั้งค่าไม่ขึ้น", e);
+      }
+    };
+
+    fetchData();
+  }, [myUserId]);
         
         const querySnapshot = await getDocs(q);
         const docs = querySnapshot.docs.map(doc => ({
@@ -174,12 +206,6 @@ function App() {
       });
       const data = await res.json();
       
-      await setDoc(doc(db, "simulations", newSimId), {
-        title: text,
-        userId: myUserId,
-        data: data,
-        createdAt: serverTimestamp()
-      });
 
       setSimulations((prev) =>
         prev.map((s) => (s.id === newSimId ? { ...s, data } : s))
