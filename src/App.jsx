@@ -24,7 +24,17 @@ function App() {
   const [messages, setMessages] = useState([]);
 
   const [simulations, setSimulations] = useState([]);
-  const [activeSimId, setActiveSimId] = useState(null);
+  // Restore the last open simulation on page refresh
+  const [activeSimId, setActiveSimId] = useState(() => localStorage.getItem('activeSimId') || null);
+
+  // Persist activeSimId whenever it changes
+  useEffect(() => {
+    if (activeSimId) {
+      localStorage.setItem('activeSimId', activeSimId);
+    } else {
+      localStorage.removeItem('activeSimId');
+    }
+  }, [activeSimId]);
 
   const [userPreferences, setUserPreferences] = useState({ 
     theme: localStorage.getItem('theme') || 'system', 

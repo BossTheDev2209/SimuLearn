@@ -42,21 +42,35 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   useEffect(() => { timeStateRef.current.isPlaying = isPlaying; }, [isPlaying]);
   useEffect(() => { timeStateRef.current.timeScale = timeScale; }, [timeScale]);
 
-  // 🌟 1. ฟีเจอร์กด Spacebar เพื่อ Play / Pause
+  // Spacebar = Play / Pause, R = Restart
+  // Use refs so listener is registered only once on mount
+  const hasStartedOnceRef = useRef(hasStartedOnce);
+  useEffect(() => { hasStartedOnceRef.current = hasStartedOnce; }, [hasStartedOnce]);
+  const handleRestartRef = useRef(null); // will point to handleRestart after it's defined below
+
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // ดักไม่ให้ทำงานถ้ากำลังพิมพ์ในช่อง Input
-      if (e.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        e.preventDefault(); // ป้องกันหน้าจอเลื่อนลงเวลาเว้นวรรค
+      const tag = e.target.tagName;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
         const nextState = !timeStateRef.current.isPlaying;
         timeStateRef.current.isPlaying = nextState;
         setIsPlaying(nextState);
-        if (!hasStartedOnce) setHasStartedOnce(true);
+        if (!hasStartedOnceRef.current) setHasStartedOnce(true);
+      }
+
+      if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        handleRestartRef.current?.();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasStartedOnce]);
+  // Only register once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [isToolbarOpen, setIsToolbarOpen] = useState(true);
   const [activeTool, setActiveTool] = useState('cursor');
@@ -109,9 +123,12 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     timeStateRef.current.isPlaying = false;
     setIsPlaying(false);
     setDisplayTime(0);
-    setRestartToken(prev => prev + 1); // Remount ControlPanel back to initial state
+    // Reset engine only — do NOT remount ControlPanel (that would delete objects).
+    // resetSimulation() re-adds all bodies from simState at their original positions.
     if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
   };
+  // Keep ref in sync so the keyboard shortcut always calls the latest version
+  handleRestartRef.current = handleRestart;
 
   // 🌟 2. รองรับการกรอเวลากลับ (Rewind) ผ่านเลขที่พิมพ์
   const handleSeek = (val) => {
@@ -159,10 +176,15 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     setTimeout(() => setSpawnToast(null), 3000); // ปิดเองใน 3 วิ
   };
 
-  // 🌟 4. ระบบเช็คพื้นที่ซ้อนทับ และเด้งหาที่ว่างให้
+  // 🌟 4. Grid click handler — with optional grid snapping
   const handleGridClick = useCallback((wx, wy) => {
     if (activeTool === 'add') {
-      
+
+      // Apply grid snapping: round to nearest integer world unit
+      const snapped = simState?.gridSnapping;
+      const fx = snapped ? Math.round(wx) : wx;
+      const fy = snapped ? Math.round(wy) : wy;
+
       // Physics body radius = obj.size world units. Use 1.1x padding.
       const overlapRadiusBase = 1.1;
       const requiredRadius = spawnConfig.size * overlapRadiusBase;
@@ -173,8 +195,8 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       for (const obj of currentObjects) {
         const pos = currentBodies[obj.id]?.position || obj.position;
         if (!pos) continue;
-        const dx = wx - pos.x;
-        const dy = wy - pos.y;
+        const dx = fx - pos.x;
+        const dy = fy - pos.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
         const objRadius = (obj.size || 1) * overlapRadiusBase;
         if (dist < requiredRadius + objRadius) {
@@ -183,14 +205,14 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
         }
       }
 
-      // Spawn at exactly the clicked position
+      // Spawn at final position
       const newObj = {
         id: 'obj_' + Date.now(),
         shape: spawnConfig.shape,
         size: spawnConfig.size,
         color: spawnConfig.color,
         isSpawned: true,
-        position: { x: wx, y: wy },
+        position: { x: fx, y: fy },
         values: { mass: spawnConfig.mass, restitution: spawnConfig.restitution }
       };
       if (controlPanelRef.current?.addObject) {
@@ -393,6 +415,8 @@ return (
                     simState={simState} initialPhysics={activeSim.physicsState} 
                     onPhysicsChange={handlePhysicsChange} activeTool={activeTool} 
                     spawnConfig={spawnConfig}
+                    gridSnapping={!!simState?.gridSnapping}
+                    showCursorCoords={!!simState?.showCursorCoords}
                     timeStateRef={timeStateRef}
                     setIsPlaying={setIsPlaying}
                   />

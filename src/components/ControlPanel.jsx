@@ -88,11 +88,12 @@ function ToggleRow({ label, checked, onChange, disabled }) {
 const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'default', onUpdate, initialState, isLocked }, ref) {
   const presetProps = SIMULATION_PRESETS[simulationType] || SIMULATION_PRESETS.default;
 
-  // Start with empty objects — objects are added explicitly via addObject() or the + button.
-  // This prevents stale saved objects (e.g. from a previous session) from appearing on load.
-  const [objects, setObjects] = useState([]);
-  const [objectCounter, setObjectCounter] = useState(0);
-  const objectCounterRef = useRef(0); // Stable ref — no stale closure in imperative handle
+  // Load previously-spawned objects from saved state (isSpawned: true only).
+  // Template preset objects (no isSpawned flag) are ignored to avoid stale placeholder circles.
+  const savedObjects = (initialState?.objects || []).filter(o => o.isSpawned);
+  const [objects, setObjects] = useState(savedObjects);
+  const [objectCounter, setObjectCounter] = useState(savedObjects.length);
+  const objectCounterRef = useRef(savedObjects.length); // Stable ref — no stale closure in imperative handle
   const [activePickerId, setActivePickerId] = useState(null);
   const anchorRefs = useRef({});
 
@@ -100,6 +101,8 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
   const [airResistance, setAirResistance] = useState(initialState?.airResistance !== undefined ? initialState.airResistance : false);
   const [showCoordinates, setShowCoordinates] = useState(initialState?.showCoordinates !== undefined ? initialState.showCoordinates : true);
   const [showTrajectory, setShowTrajectory] = useState(initialState?.showTrajectory !== undefined ? initialState.showTrajectory : true);
+  const [gridSnapping, setGridSnapping] = useState(initialState?.gridSnapping !== undefined ? initialState.gridSnapping : false);
+  const [showCursorCoords, setShowCursorCoords] = useState(initialState?.showCursorCoords !== undefined ? initialState.showCursorCoords : false);
 
   // Keep objectCounterRef in sync
   useEffect(() => { objectCounterRef.current = objectCounter; }, [objectCounter]);
@@ -131,10 +134,10 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
 
   useEffect(() => {
     if (onUpdate) {
-      onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory });
+      onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objects, gravity, airResistance, showCoordinates, showTrajectory]);
+  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords]);
 
   const [pickPending, setPickPending] = useState(false);
   const [pendingColor, setPendingColor] = useState('#22C55E');
@@ -206,32 +209,14 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
       <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-4 pb-6 flex flex-col">
 
         {objects.length === 0 ? (
-          /* Empty State */
-          <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] relative">
-              <button
-              ref={addAnchorRef}
-              onClick={startAddingObject}
-              disabled={isLocked}
-              className={`w-10 h-10 rounded-full border border-theme-border bg-theme-main flex items-center justify-center text-theme-muted transition-all duration-150 shadow-sm ${isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:border-[#FFB65A] hover:text-[#FFB65A] hover:scale-110'}`}
-              title="เพิ่มวัตถุ"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-            
-            {pickPending && !isLocked && (
-              <ObjectAppearancePicker
-                color={pendingColor}
-                shape={pendingShape}
-                onColorChange={setPendingColor}
-                onShapeChange={setPendingShape}
-                onClose={() => setPickPending(false)}
-                onConfirm={commitNewObject}
-                getAnchor={() => addAnchorRef.current}
-              />
-            )}
+          /* Empty State — hint to use canvas tool */
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] text-center px-4">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-theme-muted mb-3 opacity-40">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+            <p className="text-[13px] text-theme-muted leading-relaxed">
+              ใช้เครื่องมือ <span className="font-bold text-[#FFB65A]">＋ เพิ่มวัตถุ</span> บน Canvas<br/>เพื่อเริ่มเพิ่มวัตถุเข้ามา
+            </p>
           </div>
         ) : (
           /* Object List */
@@ -338,33 +323,7 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
               </div>
             ))}
 
-            {/* Add additional object button */}
-            <div className="flex justify-center mb-4 relative mt-2">
-              <button
-                ref={addAnchorRef}
-                onClick={startAddingObject}
-                disabled={objects.length >= PRESET_COLORS.length || isLocked}
-                className={`w-10 h-10 rounded-full border border-theme-border bg-theme-main flex items-center justify-center text-theme-muted transition-colors shadow-sm ${objects.length >= PRESET_COLORS.length || isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:border-[#FFB65A] hover:text-[#FFB65A]'}`}
-                title="เพิ่มวัตถุ"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-              
-              {pickPending && !isLocked && (
-                <ObjectAppearancePicker
-                  color={pendingColor}
-                  shape={pendingShape}
-                  onColorChange={setPendingColor}
-                  onShapeChange={setPendingShape}
-                  onClose={() => setPickPending(false)}
-                  onConfirm={commitNewObject}
-                  getAnchor={() => addAnchorRef.current}
-                />
-              )}
-            </div>
+
           </div>
         )}
 
@@ -388,6 +347,8 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
             <ToggleRow label="แรงต้านอากาศ" checked={airResistance} onChange={setAirResistance} disabled={isLocked} />
             <ToggleRow label="แสดงเส้นพิกัด" checked={showCoordinates} onChange={setShowCoordinates} />
             <ToggleRow label="แสดงเส้นวิถี" checked={showTrajectory} onChange={setShowTrajectory} />
+            <ToggleRow label="สแนปเมาส์เข้ากับตาราง" checked={gridSnapping} onChange={setGridSnapping} />
+            <ToggleRow label="แสดงพิกัดตามเมาส์" checked={showCursorCoords} onChange={setShowCursorCoords} />
           </div>
         </div>
       </div>

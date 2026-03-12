@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } f
 import Matter from 'matter-js';
 
 // 🌟 รับค่า activeTool และ spawnConfig เข้ามาใช้
-const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, timeStateRef, setIsPlaying }, ref) => {
+const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, timeStateRef, setIsPlaying }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const bodyMap = useRef(new Map()); 
@@ -295,6 +295,16 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         }
       }
 
+      // Update height (Y position) for existing body when the slider changes
+      if (body && obj.values?.height !== undefined && !timeStateRef?.current?.isPlaying) {
+        const targetY = obj.values.height;
+        if (Math.abs(body.position.y - targetY) > 0.01) {
+          Matter.Body.setPosition(body, { x: body.position.x, y: targetY });
+          Matter.Body.setVelocity(body, { x: 0, y: 0 });
+          Matter.Body.setAngularVelocity(body, 0);
+        }
+      }
+
       body.render = body.render || {};
       body.render.fillStyle = obj.color;
 
@@ -363,12 +373,22 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         ctx.stroke();
       }
 
-      // 🌟 วาดภาพโฮโลแกรมพรีวิววัตถุ (เฉพาะตอนเลือกเครื่องมือ Add)
+      // Hologram preview (only when 'add' tool active)
       if (activeTool === 'add' && spawnConfig) {
         ctx.beginPath();
         const s = spawnConfig.size * pxPerUnit;
-        const mx = mouseRef.current.x;
-        const my = mouseRef.current.y;
+        let mx = mouseRef.current.x;
+        let my = mouseRef.current.y;
+
+        // Snap preview to grid if gridSnapping is on
+        if (gridSnapping) {
+          const wx = (mx - ox) / pxPerUnit;
+          const wy = (oy - my) / pxPerUnit;
+          const snappedWx = Math.round(wx);
+          const snappedWy = Math.round(wy);
+          mx = ox + snappedWx * pxPerUnit;
+          my = oy - snappedWy * pxPerUnit;
+        }
 
         if (spawnConfig.shape === 'circle') {
           ctx.arc(mx, my, s, 0, 2 * Math.PI);
@@ -382,13 +402,49 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         }
         ctx.closePath();
         
-        ctx.fillStyle = spawnConfig.color + '66'; // Opacity 40%
+        ctx.fillStyle = spawnConfig.color + '66';
         ctx.fill();
         ctx.strokeStyle = spawnConfig.color;
         ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]); // เส้นประ
+        ctx.setLineDash([4, 4]);
         ctx.stroke();
-        ctx.setLineDash([]); // คืนค่าเส้นทึบ
+        ctx.setLineDash([]);
+      }
+
+      // Cursor Coords Tooltip
+      // Ensure we only show it when mouse is in bounds (mx, my > -1000 check handles initial state)
+      if (showCursorCoords && mouseRef.current.x > -1000) {
+        let mx = mouseRef.current.x;
+        let my = mouseRef.current.y;
+        
+        let wx = (mx - ox) / pxPerUnit;
+        let wy = (oy - my) / pxPerUnit;
+        
+        // Match the hologram snap behavior
+        if (gridSnapping && activeTool === 'add') {
+           wx = Math.round(wx);
+           wy = Math.round(wy);
+           // the visual tooltip stays near the mouse, but we show snapped coords
+        }
+
+        const text = `${wx.toFixed(1)}m, ${wy.toFixed(1)}m`;
+        ctx.font = '12px "Chakra Petch", sans-serif';
+        const textWidth = ctx.measureText(text).width;
+        const padX = 8;
+        const boxW = textWidth + padX * 2;
+        const boxH = 22;
+        
+        const tipX = mx + 15;
+        const tipY = my + 15;
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.beginPath();
+        ctx.roundRect(tipX, tipY, boxW, boxH, 4);
+        ctx.fill();
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, tipX + padX, tipY + boxH/2 + 1);
       }
 
       raf = requestAnimationFrame(draw);
