@@ -5,7 +5,7 @@ const SIMULATION_PRESETS = {
   default: [
     { key: 'height',        label: 'ความสูงเริ่มต้น (h)',        unit: 'm',     min: 0, max: 200, step: 0.5, defaultValue: 20  },
     { key: 'mass',          label: 'มวล (m)',                    unit: 'kg',    min: 0.1, max: 500, step: 0.1, defaultValue: 20 },
-    { key: 'restitution',   label: 'สัมประสิทธิ์การคืนตัว (e)',  unit: '',      min: 0, max: 1, step: 0.01, defaultValue: 0.6 },
+    { key: 'restitution',   label: 'สัมประสิทธิ์การคืนตัว (e)',  unit: '',      min: 0, max: 1, step: 0.01, defaultValue: 0 },
   ],
   projectile: [
     { key: 'angle',         label: 'มุมยิง (θ)',                 unit: '°',     min: 0, max: 90, step: 1, defaultValue: 45    },
@@ -15,7 +15,7 @@ const SIMULATION_PRESETS = {
   freefall: [
     { key: 'height',        label: 'ความสูงเริ่มต้น (h)',        unit: 'm',     min: 0, max: 500, step: 0.5, defaultValue: 50  },
     { key: 'mass',          label: 'มวล (m)',                    unit: 'kg',    min: 0.1, max: 500, step: 0.1, defaultValue: 10 },
-    { key: 'restitution',   label: 'สัมประสิทธิ์การคืนตัว (e)',  unit: '',      min: 0, max: 1, step: 0.01, defaultValue: 0.8  },
+    { key: 'restitution',   label: 'สัมประสิทธิ์การคืนตัว (e)',  unit: '',      min: 0, max: 1, step: 0.01, defaultValue: 0  },
   ],
 };
 
@@ -127,6 +127,9 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
     },
     clearAll: () => {
       setObjects([]);
+    },
+    updateObjectValues: (objId, newValues) => {
+      setObjects((prev) => prev.map((o) => (o.id === objId ? { ...o, values: { ...o.values, ...newValues } } : o)));
     },
   }));
 

@@ -1,16 +1,18 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import Matter from 'matter-js';
 
-// 🌟 รับค่า activeTool และ spawnConfig เข้ามาใช้
 const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, timeStateRef, setIsPlaying }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const bodyMap = useRef(new Map()); 
   const restoredBodiesRef = useRef(new Set());
   const onPhysicsChangeRef = useRef(onPhysicsChange);
+  const drawingVectorRef = useRef(null);
   const simStateRef = useRef(simState); // keep a live ref so engine init can read latest simState
+  const lastAppliedHeightRef = useRef(new Map()); // track applied heights to prevent constant teleporting
+  const lastAppliedVelocityRef = useRef(new Map()); // track applied velocities
 
-  // 🌟 ตัวดักจับเมาส์สำหรับพรีวิว
+
   const mouseRef = useRef({ x: -1000, y: -1000 });
 
   useEffect(() => {
@@ -44,11 +46,8 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // 1. Initialize engine
   const [engineResetToken, setEngineResetToken] = useState(0);
-  // Pending action after engine reset (e.g. fast-forward to a target time)
   const pendingActionRef = useRef(null);
-  // Token to force re-sync simState -> engine bodies
   const [simSyncToken, setSimSyncToken] = useState(0);
 
   useImperativeHandle(ref, () => ({
@@ -60,7 +59,6 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
       const engine = engineRef.current;
       if (!engine) return;
       const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground' && !b.isStatic);
-      // Run a few position-correction passes
       for (let pass = 0; pass < 5; pass++) {
         for (let i = 0; i < bodies.length; i++) {
           for (let j = i + 1; j < bodies.length; j++) {
@@ -82,6 +80,52 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
           }
         }
       }
+    },
+    startVectorDrag: (wx, wy, activeTool) => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      
+      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground' && !b.isStatic);
+      const clickedBodies = Matter.Query.point(bodies, { x: wx, y: wy });
+      
+      if (clickedBodies.length > 0) {
+        const body = clickedBodies[0];
+        let objId = null;
+        for (const [id, b] of bodyMap.current.entries()) {
+          if (b === body) { objId = id; break; }
+        }
+        if (objId) {
+          drawingVectorRef.current = {
+            type: activeTool,
+            objId,
+            startX: body.position.x,
+            startY: body.position.y,
+            currentX: wx,
+            currentY: wy
+          };
+          return true;
+        }
+      }
+      return false;
+    },
+    moveVectorDrag: (wx, wy) => {
+      if (drawingVectorRef.current) {
+        drawingVectorRef.current.currentX = wx;
+        drawingVectorRef.current.currentY = wy;
+      }
+    },
+    endVectorDrag: (wx, wy) => {
+      if (drawingVectorRef.current) {
+        const v = drawingVectorRef.current;
+        v.currentX = wx;
+        v.currentY = wy;
+        const dx = v.currentX - v.startX;
+        const dy = v.currentY - v.startY;
+        const res = { ...v };
+        drawingVectorRef.current = null;
+        return res;
+      }
+      return null;
     }
   }));
 
@@ -101,15 +145,11 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
     });
     Matter.Composite.add(engine.world, ground);
 
-    // Force re-sync bodies from simState after engine rebuild
     setSimSyncToken(prev => prev + 1);
 
-    // Handle pending action (e.g. fast-forward to a target time after a reset)
-    // We use a microtask so that the simState sync effect has a chance to add bodies first.
     if (pendingActionRef.current) {
       const action = pendingActionRef.current;
       pendingActionRef.current = null;
-      // Use setTimeout to let React flush the simSyncToken update and re-add bodies
       setTimeout(() => {
         if (action.targetTime != null && action.targetTime > 0) {
           const TIME_STEP_MS = 1000 / 120;
@@ -169,6 +209,21 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
                  accumulator += deltaBrowser * tScale;
                  let stepsThisFrame = 0;
                  while (accumulator >= TIME_STEP && stepsThisFrame < 20) {
+                    // Apply continuous forces before update
+                    if (simStateRef.current?.objects) {
+                       for (const obj of simStateRef.current.objects) {
+                          if (!obj.isSpawned || !obj.values?.force) continue;
+                          const body = bodyMap.current.get(obj.id);
+                          if (body) {
+                             const mag = obj.values.force * 0.001; // Scaled to be physics-friendly
+                             const ang = obj.values.forceAngle || 0;
+                             const fx = mag * Math.cos(ang * Math.PI / 180);
+                             const fy = -mag * Math.sin(ang * Math.PI / 180); // Y inverted
+                             Matter.Body.applyForce(body, body.position, { x: fx, y: fy });
+                          }
+                       }
+                    }
+
                     Matter.Engine.update(engine, TIME_STEP);
                     accumulator -= TIME_STEP;
                     stepsThisFrame++;
@@ -253,7 +308,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         const s = obj.size !== undefined ? obj.size : 1; 
 
         let newBody;
-        const opts = { restitution: 0.6, friction: 0.8 };
+        const opts = { restitution: 0, friction: 0.8 };
         if (obj.shape === 'circle') {
           opts.friction = 1.0;
           opts.frictionStatic = 2.0;
@@ -298,10 +353,13 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
       // Update height (Y position) for existing body when the slider changes
       if (body && obj.values?.height !== undefined && !timeStateRef?.current?.isPlaying) {
         const targetY = obj.values.height;
-        if (Math.abs(body.position.y - targetY) > 0.01) {
-          Matter.Body.setPosition(body, { x: body.position.x, y: targetY });
-          Matter.Body.setVelocity(body, { x: 0, y: 0 });
-          Matter.Body.setAngularVelocity(body, 0);
+        if (lastAppliedHeightRef.current.get(obj.id) !== targetY) {
+          if (Math.abs(body.position.y - targetY) > 0.01) {
+            Matter.Body.setPosition(body, { x: body.position.x, y: targetY });
+            Matter.Body.setVelocity(body, { x: 0, y: 0 });
+            Matter.Body.setAngularVelocity(body, 0);
+          }
+          lastAppliedHeightRef.current.set(obj.id, targetY);
         }
       }
 
@@ -314,6 +372,20 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
          }
          if (obj.values.restitution !== undefined) {
            body.restitution = obj.values.restitution;
+         }
+         // Apply velocity immediately if changed while paused
+         if (!timeStateRef?.current?.isPlaying && obj.values.velocity !== undefined) {
+           const mag = obj.values.velocity;
+           const ang = obj.values.angle || 0;
+           const trackedStr = lastAppliedVelocityRef.current.get(obj.id);
+           const currentStr = `${mag}_${ang}`;
+           
+           if (trackedStr !== currentStr) {
+               const vx = mag * Math.cos(ang * Math.PI / 180);
+               const vy = -mag * Math.sin(ang * Math.PI / 180); // Y is inverted in Matter.js
+               Matter.Body.setVelocity(body, { x: vx, y: vy });
+               lastAppliedVelocityRef.current.set(obj.id, currentStr);
+           }
          }
       }
       body.frictionAir = currentSimState.airResistance ? 0.05 : 0;
@@ -373,6 +445,97 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         ctx.stroke();
       }
 
+      // 🌟 Helper to draw arrows
+      const drawArrow = (fromWx, fromWy, toWx, toWy, color) => {
+        const fromPos = toScreen(fromWx, fromWy);
+        const toPos = toScreen(toWx, toWy);
+        const headlen = 12; // length of head in pixels
+        const dx = toPos.x - fromPos.x;
+        const dy = toPos.y - fromPos.y;
+        const angle = Math.atan2(dy, dx);
+        
+        ctx.beginPath();
+        ctx.moveTo(fromPos.x, fromPos.y);
+        ctx.lineTo(toPos.x, toPos.y);
+        ctx.lineTo(toPos.x - headlen * Math.cos(angle - Math.PI / 6), toPos.y - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(toPos.x, toPos.y);
+        ctx.lineTo(toPos.x - headlen * Math.cos(angle + Math.PI / 6), toPos.y - headlen * Math.sin(angle + Math.PI / 6));
+        
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      };
+
+      // 🌟 Render existing velocity and force vectors for objects
+      if (simStateRef.current?.objects) {
+        simStateRef.current.objects.forEach(obj => {
+          if (!obj.isSpawned) return;
+          const body = bodyMap.current.get(obj.id);
+          if (!body) return;
+          const px = body.position.x;
+          const py = body.position.y;
+          
+          if (obj.values?.velocity) {
+            const mag = obj.values.velocity;
+            const ang = obj.values.angle || 0;
+            // Draw blue line proportional to magnitude
+            const dx = (mag * Math.cos(ang * Math.PI / 180)) * 0.2; // scale visually
+            const dy = (mag * Math.sin(ang * Math.PI / 180)) * 0.2;
+            const toX = px + dx; 
+            const toY = py + dy;
+            
+            // Draw components
+            if (Math.abs(dx) > 0.01 && Math.abs(dy) > 0.01) {
+              ctx.setLineDash([4, 4]);
+              drawArrow(px, py, px + dx, py, 'rgba(59, 130, 246, 0.4)'); // X component
+              drawArrow(px + dx, py, px + dx, py + dy, 'rgba(59, 130, 246, 0.4)'); // Y component
+              ctx.setLineDash([]);
+            }
+            
+            drawArrow(px, py, toX, toY, '#3B82F6'); // Main Blue
+          }
+          
+          if (obj.values?.force) {
+            const mag = obj.values.force;
+            const ang = obj.values.forceAngle || 0;
+            // Draw red line proportional to force
+            const dx = (mag * Math.cos(ang * Math.PI / 180)) * 0.2;
+            const dy = (mag * Math.sin(ang * Math.PI / 180)) * 0.2;
+            const toX = px + dx;
+            const toY = py + dy;
+
+            // Draw components
+            if (Math.abs(dx) > 0.01 && Math.abs(dy) > 0.01) {
+              ctx.setLineDash([4, 4]);
+              drawArrow(px, py, px + dx, py, 'rgba(239, 68, 68, 0.4)'); // X component
+              drawArrow(px + dx, py, px + dx, py + dy, 'rgba(239, 68, 68, 0.4)'); // Y component
+              ctx.setLineDash([]);
+            }
+
+            drawArrow(px, py, toX, toY, '#EF4444'); // Main Red
+          }
+        });
+      }
+
+      // 🌟 Render actively drawn vector
+      if (drawingVectorRef.current) {
+        const v = drawingVectorRef.current;
+        const color = v.type === 'velocity' ? '#3B82F6' : '#EF4444';
+        const colorLight = v.type === 'velocity' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+        
+        const dx = v.currentX - v.startX;
+        const dy = v.currentY - v.startY;
+        
+        if (Math.abs(dx) > 0.01 && Math.abs(dy) > 0.01) {
+          ctx.setLineDash([4, 4]);
+          drawArrow(v.startX, v.startY, v.startX + dx, v.startY, colorLight);
+          drawArrow(v.startX + dx, v.startY, v.currentX, v.currentY, colorLight);
+          ctx.setLineDash([]);
+        }
+        
+        drawArrow(v.startX, v.startY, v.currentX, v.currentY, color);
+      }
+
       // Hologram preview (only when 'add' tool active)
       if (activeTool === 'add' && spawnConfig) {
         ctx.beginPath();
@@ -421,10 +584,12 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         let wy = (oy - my) / pxPerUnit;
         
         // Match the hologram snap behavior
-        if (gridSnapping && activeTool === 'add') {
+        if (gridSnapping) {
            wx = Math.round(wx);
            wy = Math.round(wy);
-           // the visual tooltip stays near the mouse, but we show snapped coords
+           // visually stick tooltip to the snapped grid intersection point
+           mx = ox + wx * pxPerUnit;
+           my = oy - wy * pxPerUnit;
         }
 
         const text = `${wx.toFixed(1)}m, ${wy.toFixed(1)}m`;
@@ -452,7 +617,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [w, h, ox, oy, pxPerUnit, activeTool, spawnConfig]);
+  }, [w, h, ox, oy, pxPerUnit, activeTool, spawnConfig, gridSnapping, showCursorCoords]);
 
   return (
     <canvas 

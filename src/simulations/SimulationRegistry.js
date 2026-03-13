@@ -18,14 +18,14 @@ export const SimulationRegistry = {
             id: 'obj_1', 
             isSpawned: true,
             shape: 'circle',
-            size: 20, 
+            size: 0.5, 
             color: '#FFB65A', 
             values: { 
               height: h_start, 
               velocity: velocity, 
               angle: angle, 
               mass: mass, 
-              restitution: 0.6 
+              restitution: 0 
             }
           }
         ]

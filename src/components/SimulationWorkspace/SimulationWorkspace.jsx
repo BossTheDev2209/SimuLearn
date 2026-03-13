@@ -1,10 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ControlPanel from '../ControlPanel'; 
-
+import ControlPanel from '../ControlPanel';
 import InteractiveGrid from './InteractiveGrid';
 import MatterCanvas from './MatterCanvas';
-import Timebar from './Timebar';
+import Timebar, { ArrowUpIcon, ArrowDownIcon } from './Timebar';
 
 // 🌟 Component แยกที่นำกลับมาใช้ซ้ำได้
 const SharedSlider = ({ label, value, min, max, step, onChange }) => (
@@ -24,6 +23,7 @@ const SharedSlider = ({ label, value, min, max, step, onChange }) => (
 export default function SimulationWorkspace({ activeSim, isInteracting, onSaveControlState, onSavePhysicsState }) {
   const shouldHideLogo = isInteracting || activeSim !== null;
   const [simState, setSimState] = useState(null);
+  const [vectorEditor, setVectorEditor] = useState(null);
 
   // --- Timebar integration states ---
   const [isPlaying, setIsPlaying] = useState(false);
@@ -39,7 +39,10 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const timeStateRef = useRef({ time: 0, isPlaying: false, timeScale: 1, targetTime: null });
 
   // Update ref from state
-  useEffect(() => { timeStateRef.current.isPlaying = isPlaying; }, [isPlaying]);
+  useEffect(() => { 
+    timeStateRef.current.isPlaying = isPlaying; 
+    if (isPlaying) setVectorEditor(null);
+  }, [isPlaying]);
   useEffect(() => { timeStateRef.current.timeScale = timeScale; }, [timeScale]);
 
   // Spacebar = Play / Pause, R = Restart
@@ -80,7 +83,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     size: 1,
     color: '#FFB65A',
     mass: 10,
-    restitution: 0.6
+    restitution: 0
   });
 
   const cameraRef = useRef(activeSim?.physicsState?.camera || { zoom: 1, offset: {x:0, y:0} });
@@ -159,6 +162,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       setIsClearModalOpen(true);
     } else {
       setActiveTool(toolId);
+      setVectorEditor(null); // Clear vector editor when changing tools
     }
   };
 
@@ -253,6 +257,72 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       }
     }
   }, [activeTool, spawnConfig, simState, onSaveControlState]);
+
+  const handleGridPointerDown = useCallback((wx, wy, e) => {
+    if (activeTool === 'velocity' || activeTool === 'force') {
+      let nx = wx, ny = wy;
+      if (simState?.gridSnapping) {
+         nx = Math.round(wx);
+         ny = Math.round(wy);
+      }
+      return matterCanvasRef.current?.startVectorDrag(nx, ny, activeTool) || false;
+    }
+    return false;
+  }, [activeTool, simState?.gridSnapping]);
+
+  const handleGridPointerMove = useCallback((wx, wy, e) => {
+    if (activeTool === 'velocity' || activeTool === 'force') {
+      let nx = wx, ny = wy;
+      if (simState?.gridSnapping) {
+         nx = Math.round(wx);
+         ny = Math.round(wy);
+      }
+      matterCanvasRef.current?.moveVectorDrag(nx, ny);
+    }
+  }, [activeTool, simState?.gridSnapping]);
+
+  const handleGridPointerUp = useCallback((wx, wy, e) => {
+    if (activeTool === 'velocity' || activeTool === 'force') {
+      const v = matterCanvasRef.current?.endVectorDrag(wx, wy);
+      if (v) {
+        const dx = v.currentX - v.startX;
+        const dy = v.currentY - v.startY;
+        const dragDist = Math.sqrt(dx*dx + dy*dy);
+        
+        // Find existing object
+        const obj = simState?.objects?.find(o => o.id === v.objId);
+        if (!obj) return;
+        
+        let magnitude, angle;
+        if (dragDist < 0.2) { // just a click
+          magnitude = activeTool === 'velocity' ? (obj.values?.velocity || 0) : (obj.values?.force || 0);
+          angle = activeTool === 'velocity' ? (obj.values?.angle || 0) : (obj.values?.forceAngle || 0);
+        } else {
+          // multiplier 5 matches the matter canvas scale 0.2
+          magnitude = Math.round(dragDist * 5 * 10) / 10; 
+          angle = Math.round(Math.atan2(dy, dx) * (180 / Math.PI));
+          if (v.type === 'velocity') {
+             controlPanelRef.current?.updateObjectValues(v.objId, { velocity: magnitude, angle: angle });
+          } else {
+             controlPanelRef.current?.updateObjectValues(v.objId, { force: magnitude, forceAngle: angle });
+          }
+        }
+        
+        setVectorEditor({ 
+           objId: v.objId, 
+           type: activeTool, 
+           magnitude, 
+           angle, 
+           screenX: e.clientX, 
+           screenY: e.clientY 
+        });
+      } else {
+        setVectorEditor(null);
+      }
+    } else if (activeTool === 'cursor') {
+      setVectorEditor(null);
+    }
+  }, [activeTool, simState]);
 
   const tools = [
     { id: 'cursor', title: 'เลือก / เลื่อนจอ (V)', icon: <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/> },
@@ -406,20 +476,129 @@ return (
                   onSeek={handleSeek}
                 />
               </div>
-
-              <InteractiveGrid initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange} activeTool={activeTool} onGridClick={handleGridClick}>
+              <InteractiveGrid 
+                initialCamera={activeSim.physicsState?.camera} 
+                onCameraChange={handleCameraChange} 
+                activeTool={activeTool} 
+                onGridClick={handleGridClick}
+                onGridPointerDown={handleGridPointerDown}
+                onGridPointerMove={handleGridPointerMove}
+                onGridPointerUp={handleGridPointerUp}
+              >
                 {({ size, offset, zoom }) => (
-                  <MatterCanvas 
-                    ref={matterCanvasRef}
-                    size={size} offset={offset} zoom={zoom} 
-                    simState={simState} initialPhysics={activeSim.physicsState} 
-                    onPhysicsChange={handlePhysicsChange} activeTool={activeTool} 
-                    spawnConfig={spawnConfig}
-                    gridSnapping={!!simState?.gridSnapping}
-                    showCursorCoords={!!simState?.showCursorCoords}
-                    timeStateRef={timeStateRef}
-                    setIsPlaying={setIsPlaying}
-                  />
+                  <>
+                    <MatterCanvas 
+                      ref={matterCanvasRef}
+                      size={size} offset={offset} zoom={zoom} 
+                      simState={simState} initialPhysics={activeSim.physicsState} 
+                      onPhysicsChange={handlePhysicsChange} activeTool={activeTool} 
+                      spawnConfig={spawnConfig}
+                      gridSnapping={!!simState?.gridSnapping}
+                      showCursorCoords={!!simState?.showCursorCoords}
+                      timeStateRef={timeStateRef}
+                      setIsPlaying={setIsPlaying}
+                    />
+
+                    {/* Vector Editor Overlay */}
+                    <AnimatePresence>
+                      {vectorEditor && (
+                        <motion.div 
+                          initial={{ opacity: 0, scale: 0.8 }} 
+                          animate={{ opacity: 1, scale: 1 }} 
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          className="fixed z-[300] bg-white dark:bg-[#2B2D31] rounded-[10px] shadow-lg border border-theme-border p-2 flex flex-col gap-2"
+                          style={{ left: vectorEditor.screenX + 15, top: vectorEditor.screenY + 15 }}
+                        >
+                          <div className="flex justify-between items-center px-1">
+                            <span className="text-xs font-bold text-theme-secondary flex items-center gap-1">
+                              {vectorEditor.type === 'velocity' ? 'เวกเตอร์ความเร็ว (v)' : 'เวกเตอร์แรง (F)'}
+                              {vectorEditor.type === 'velocity' ? <span className="w-2 h-2 rounded-full bg-blue-500"></span> : <span className="w-2 h-2 rounded-full bg-red-500"></span>}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1.5 min-w-[140px]">
+                            <div className="flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-md px-2 py-1 relative pr-8">
+                              <span className="text-xs text-theme-secondary shrink-0 font-['Chakra_Petch']" style={{width: 35}}>ขนาด:</span>
+                              <input 
+                                autoFocus
+                                type="number" 
+                                className="w-full bg-transparent text-sm font-medium outline-none text-theme-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                value={vectorEditor.magnitude}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value) || 0;
+                                  setVectorEditor(prev => ({ ...prev, magnitude: val }));
+                                  if (vectorEditor.type === 'velocity') {
+                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { velocity: val });
+                                  } else {
+                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { force: val });
+                                  }
+                                }}
+                              />
+                              <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
+                                <button tabIndex={-1} onClick={() => {
+                                  const val = Number(vectorEditor.magnitude) + 1;
+                                  setVectorEditor(prev => ({ ...prev, magnitude: val }));
+                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { velocity: val });
+                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { force: val });
+                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300">
+                                  <ArrowUpIcon />
+                                </button>
+                                <button tabIndex={-1} onClick={() => {
+                                  const val = Math.max(0, Number(vectorEditor.magnitude) - 1);
+                                  setVectorEditor(prev => ({ ...prev, magnitude: val }));
+                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { velocity: val });
+                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { force: val });
+                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22]">
+                                  <ArrowDownIcon />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-md px-2 py-1 relative pr-8">
+                              <span className="text-xs text-theme-secondary shrink-0 font-['Chakra_Petch']" style={{width: 35}}>มุม:</span>
+                              <input 
+                                type="number" 
+                                className="w-full bg-transparent text-sm font-medium outline-none text-theme-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                value={vectorEditor.angle}
+                                onChange={(e) => {
+                                  let val = Number(e.target.value) || 0;
+                                  setVectorEditor(prev => ({ ...prev, angle: val }));
+                                  if (vectorEditor.type === 'velocity') {
+                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { angle: val });
+                                  } else {
+                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { forceAngle: val });
+                                  }
+                                }}
+                              />
+                              <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
+                                <button tabIndex={-1} onClick={() => {
+                                  const val = Number(vectorEditor.angle) + 1;
+                                  setVectorEditor(prev => ({ ...prev, angle: val }));
+                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { angle: val });
+                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { forceAngle: val });
+                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300">
+                                  <ArrowUpIcon />
+                                </button>
+                                <button tabIndex={-1} onClick={() => {
+                                  const val = Number(vectorEditor.angle) - 1;
+                                  setVectorEditor(prev => ({ ...prev, angle: val }));
+                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { angle: val });
+                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { forceAngle: val });
+                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22]">
+                                  <ArrowDownIcon />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <button 
+                            onClick={() => setVectorEditor(null)}
+                            className="bg-theme-primary text-white text-xs font-bold py-1.5 rounded-md hover:opacity-90 transition-opacity w-full mt-1"
+                          >
+                            ตกลง
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
                 )}
               </InteractiveGrid>
 

@@ -16,7 +16,7 @@ function formatLabel(value) {
   return String(rounded);
 }
 
-export default function InteractiveGrid({ children, initialCamera, onCameraChange, activeTool = 'cursor', onGridClick }) {
+export default function InteractiveGrid({ children, initialCamera, onCameraChange, activeTool = 'cursor', onGridClick, onGridPointerDown, onGridPointerMove, onGridPointerUp }) {
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
 
@@ -37,15 +37,48 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
     return () => ro.disconnect();
   }, []);
 
+  // Helper to convert MouseEvent to World Coordinates
+  const getSimCoords = useCallback((e) => {
+    const el = e.currentTarget;
+    if (!el) return { wx: 0, wy: 0 };
+    const rect = el.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const w = size.w;
+    const h = size.h;
+    const ox = w / 2 + offset.x;
+    const oy = h / 2 + offset.y;
+    const pxPerUnit = 50 * zoom;
+    return {
+      wx: (screenX - ox) / pxPerUnit,
+      wy: (oy - screenY) / pxPerUnit
+    };
+  }, [size, offset, zoom]);
+
   const handlePointerDown = useCallback((e) => {
     if (e.button !== 0) return; 
-    dragging.current = true;
-    dragStart.current = { x: e.clientX, y: e.clientY };
-    offsetStart.current = { ...offset };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }, [offset]);
+    
+    // Invoke general callback
+    const coords = getSimCoords(e);
+    let consumed = false;
+    if (onGridPointerDown) {
+      consumed = onGridPointerDown(coords.wx, coords.wy, e);
+    }
+
+    if (activeTool === 'cursor' || !consumed) {
+      dragging.current = true;
+      dragStart.current = { x: e.clientX, y: e.clientY };
+      offsetStart.current = { ...offset };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  }, [offset, activeTool, getSimCoords, onGridPointerDown]);
 
   const handlePointerMove = useCallback((e) => {
+    if (onGridPointerMove) {
+      const coords = getSimCoords(e);
+      onGridPointerMove(coords.wx, coords.wy, e);
+    }
+
     if (!dragging.current) return;
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
@@ -53,32 +86,29 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
       x: offsetStart.current.x + dx,
       y: offsetStart.current.y + dy,
     });
-  }, []);
+  }, [activeTool, offsetStart, onGridPointerMove, getSimCoords]);
 
   const handlePointerUp = useCallback((e) => {
+    if (onGridPointerUp) {
+      const coords = getSimCoords(e);
+      onGridPointerUp(coords.wx, coords.wy, e);
+    }
+
+    const wasDragging = dragging.current;
     dragging.current = false;
+    
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
     
-    if (Math.sqrt(dx*dx + dy*dy) < 5) {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
-
-        const w = size.w;
-        const h = size.h;
-        const ox = w / 2 + offset.x;
-        const oy = h / 2 + offset.y;
-        const pxPerUnit = 50 * zoom;
-
-        const wx = (screenX - ox) / pxPerUnit;
-        const wy = (oy - screenY) / pxPerUnit;
-
-        if (onGridClick) {
-            onGridClick(wx, wy);
-        }
+    if (wasDragging || activeTool !== 'cursor') {
+      if (!wasDragging || Math.sqrt(dx*dx + dy*dy) < 5) {
+          const coords = getSimCoords(e);
+          if (onGridClick) {
+              onGridClick(coords.wx, coords.wy);
+          }
+      }
     }
-  }, [size, offset, zoom, onGridClick]);
+  }, [activeTool, getSimCoords, onGridPointerUp, onGridClick]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();

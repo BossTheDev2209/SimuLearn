@@ -24,10 +24,8 @@ function App() {
   const [messages, setMessages] = useState([]);
 
   const [simulations, setSimulations] = useState([]);
-  // Restore the last open simulation on page refresh
   const [activeSimId, setActiveSimId] = useState(() => localStorage.getItem('activeSimId') || null);
 
-  // Persist activeSimId whenever it changes
   useEffect(() => {
     if (activeSimId) {
       localStorage.setItem('activeSimId', activeSimId);
@@ -93,7 +91,6 @@ function App() {
           if (!res.ok) throw new Error(`API error: ${res.status}`);
           const apiHistory = await res.json();
 
-          // Guard: ถ้า API ไม่ได้ส่ง Array กลับมา (เช่น ส่ง error object หรือ null) ให้หยุดเลย
           if (!Array.isArray(apiHistory)) {
             console.warn("API ไม่ได้ส่ง Array กลับมา:", apiHistory);
             return;
@@ -101,14 +98,11 @@ function App() {
 
           const formattedSimulations = apiHistory.map((item) => {
             const simType = item?.type || item?.topic_type || 'free_fall';
-
-            // 🌟 1. ไขคดีข้อมูลซ้ำ: เช็คก่อนว่าข้อมูลถูก Parse มาสมบูรณ์แล้วหรือยัง
             let parsedData = null;
             try {
               if (item?.data?.objects) {
-                parsedData = item.data; // ถ้ามีของครบแล้ว ให้ดึงมาใช้ได้เลย! ห้ามจัดรูปแบบใหม่!
+                parsedData = item.data; 
               } else {
-                // ถ้าเป็นข้อมูลเก่า/ข้อมูลดิบ ค่อยเอามาเข้าแม่แบบ
                 const template = getSimulationTemplate(simType);
                 const rawVariables = item?.calculated_variables || item?.data?.variables || {};
                 parsedData = {
@@ -267,16 +261,32 @@ function App() {
         ...template.parseData(rawVariables)
       };
 
-      await setDoc(doc(db, "simulations", newSimId), {
-        title: text,
-        userId: myUserId,
-        data: formattedData,
-        createdAt: serverTimestamp()
-      });
+      const finalId = apiData.id ? apiData.id.toString() : newSimId;
 
-      setSimulations((prev) =>
-        prev.map((s) => (s.id === newSimId ? { ...s, data: formattedData } : s))
-      );
+      if (!apiData.id) {
+         // Backend did not save to DB, so Frontend handles it
+         await setDoc(doc(db, "simulations", finalId), {
+           title: text,
+           userId: myUserId,
+           data: formattedData,
+           createdAt: serverTimestamp()
+         });
+      }
+
+      setSimulations((prev) => {
+         const filtered = prev.filter(s => s.id !== newSimId);
+         return [
+            { 
+               id: finalId, 
+               title: apiData.title || text, 
+               userId: myUserId, 
+               data: formattedData, 
+               createdAt: apiData.createdAt ? new Date(apiData.createdAt) : new Date() 
+            },
+            ...filtered
+         ];
+      });
+      setActiveSimId(finalId);
     } catch (err) {
       console.error("ยิง API ไม่ติด:", err);
       alert("เซิร์ฟเวอร์เปิดหรือยัง?");
@@ -396,7 +406,7 @@ function App() {
 
       <div className="flex-1 relative w-full h-full">
         
-        {/* Layer 0: กระดานจำลองและโลโก้ (อยู่เป็นพื้นหลังเสมอ) */}
+        {/* Layer 0: logo*/}
         <div className="absolute inset-0 z-0">
           <SimulationWorkspace
             key={activeSim?.id || 'empty'}
@@ -407,7 +417,7 @@ function App() {
           />
         </div>
         
-        {/* Layer 1: แชท (ลอยอยู่ด้านหน้า และยอมให้กดทะลุไปข้างหลังได้ในบางจังหวะ) */}
+        {/* Layer 1: chat*/}
         {(!activeSim || !activeSim.data) && (
           <div className={`absolute inset-0 z-10 flex flex-col pointer-events-none ${isLoading ? 'bg-white/40 dark:bg-black/40 backdrop-blur-[2px]' : ''}`}>
             <div className="flex-1 pointer-events-auto">
@@ -421,7 +431,7 @@ function App() {
         )}
       </div>
 
-      {/* โมดอลต่างๆ วางไว้ชั้นนอกสุดของแอป */}
+      {/*outer layer*/}
       <SearchModal
         isOpen={isSearchOpen}
         onClose={handleCloseSearch}
