@@ -1,19 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-/**
- * Custom hook to handle Zoom, Pan, and Coordinate conversion logic.
- */
-export const useZoomLogic = (
-  containerRef, 
-  initialCamera, 
-  onCameraChange, 
-  activeTool, 
-  onGridPointerDown, 
-  onGridPointerMove, 
-  onGridPointerUp, 
-  onGridClick,
-  unitStep
-) => {
+export const useZoomLogic = (containerRef, initialCamera, onCameraChange, activeTool, onGridPointerDown, onGridPointerMove, onGridPointerUp, onGridClick, unitStep) => {
   const [camera, setCamera] = useState({
     offset: initialCamera?.offset || { x: 0, y: 0 },
     zoom: initialCamera?.zoom || 1
@@ -21,12 +8,10 @@ export const useZoomLogic = (
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [isDragging, setIsDragging] = useState(false);
   
-  const dragging = useRef(false);
-  const dragStartWorld = useRef({ wx: 0, wy: 0 });
-
+  const dragStartScreen = useRef({ x: 0, y: 0 });
+  const dragStartOffset = useRef({ x: 0, y: 0 });
   const PIXELS_PER_METER = 100;
 
-  // Handle Resize
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -38,98 +23,69 @@ export const useZoomLogic = (
     return () => ro.disconnect();
   }, [containerRef]);
 
-  // Screen -> World conversion (Absolute)
-  const getSimCoordsLocal = useCallback((e, currentOffset, currentZoom, currentSize) => {
+  const getSimCoords = useCallback((e) => {
     const el = containerRef.current;
     if (!el) return { wx: 0, wy: 0 };
     const rect = el.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    
     return {
-      wx: (screenX - (currentSize.w / 2 + currentOffset.x)) / (PIXELS_PER_METER * currentZoom),
-      wy: ((currentSize.h / 2 + currentOffset.y) - screenY) / (PIXELS_PER_METER * currentZoom)
+      wx: (screenX - (size.w / 2 + camera.offset.x)) / (PIXELS_PER_METER * camera.zoom),
+      wy: ((size.h / 2 + camera.offset.y) - screenY) / (PIXELS_PER_METER * camera.zoom)
     };
-  }, [containerRef]);
+  }, [containerRef, camera, size]);
 
-  const getSimCoords = useCallback((e) => {
-    return getSimCoordsLocal(e, camera.offset, camera.zoom, size);
-  }, [camera, size, getSimCoordsLocal]);
-
-  const handlePointerDown = useCallback((e) => {
+  const handlePointerDown = (e) => {
     if (e.button !== 0) return;
     const coords = getSimCoords(e);
-    let consumed = false;
-    
-    if (onGridPointerDown) {
-      consumed = onGridPointerDown(coords.wx, coords.wy, e, unitStep);
-    }
+    const consumed = onGridPointerDown?.(coords.wx, coords.wy, e, unitStep);
     
     if (activeTool === 'cursor' || !consumed) {
-      dragging.current = true;
       setIsDragging(true);
-      dragStartWorld.current = coords; // Capture world point under cursor
+      dragStartScreen.current = { x: e.clientX, y: e.clientY };
+      dragStartOffset.current = { ...camera.offset };
       e.currentTarget.setPointerCapture(e.pointerId);
     }
-  }, [getSimCoords, onGridPointerDown, unitStep, activeTool]);
+  };
 
-  const handlePointerMove = useCallback((e) => {
+  const handlePointerMove = (e) => {
     const coords = getSimCoords(e);
-    if (onGridPointerMove) {
-      onGridPointerMove(coords.wx, coords.wy, e, unitStep);
-    }
-    
-    if (!dragging.current) return;
+    onGridPointerMove?.(coords.wx, coords.wy, e, unitStep);
+    if (!isDragging) return;
 
-    // Recalculate offset to keep dragStartWorld under current cursor position
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    // 🌟 INVERSE PANNING: ลบ Delta ออกจาก Offset เริ่มต้น (ลากกระดาษสวนทางเมาส์)
+    const dx = (e.clientX - dragStartScreen.current.x) / camera.zoom;
+    const dy = (e.clientY - dragStartScreen.current.y) / camera.zoom;
 
     setCamera(prev => ({
       ...prev,
       offset: {
-        x: mx - size.w / 2 - dragStartWorld.current.wx * (PIXELS_PER_METER * prev.zoom),
-        y: size.h / 2 - my + dragStartWorld.current.wy * (PIXELS_PER_METER * prev.zoom)
+        x: dragStartOffset.current.x - dx, // เปลี่ยนเป็นลบเพื่อ Inverse
+        y: dragStartOffset.current.y - dy  // เปลี่ยนเป็นลบเพื่อ Inverse
       }
     }));
-  }, [getSimCoords, onGridPointerMove, unitStep, size, containerRef]);
+  };
 
-  const handlePointerUp = useCallback((e) => {
+  const handlePointerUp = (e) => {
     const coords = getSimCoords(e);
-    if (onGridPointerUp) {
-      onGridPointerUp(coords.wx, coords.wy, e, unitStep);
-    }
-    
-    const wasDragging = dragging.current;
-    dragging.current = false;
+    onGridPointerUp?.(coords.wx, coords.wy, e, unitStep);
     setIsDragging(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
+    const dx = e.clientX - dragStartScreen.current.x;
+    const dy = e.clientY - dragStartScreen.current.y;
+    if ((activeTool !== 'cursor' || Math.sqrt(dx*dx + dy*dy) < 5) && onGridClick) {
+      onGridClick(coords.wx, coords.wy, unitStep);
     }
-    
-    // Use world-space distance check instead of screen pixels for tool click
-    const dx = coords.wx - dragStartWorld.current.wx;
-    const dy = coords.wy - dragStartWorld.current.wy;
-    const distW = Math.sqrt(dx * dx + dy * dy);
-    
-    if (activeTool !== 'cursor' || distW < 0.1) {
-      if (onGridClick) onGridClick(coords.wx, coords.wy, unitStep);
-    }
-  }, [getSimCoords, onGridPointerUp, activeTool, onGridClick, unitStep]);
+  };
 
-  const handleWheel = useCallback((e) => {
+  const handleWheel = (e) => {
     e.preventDefault();
     const el = containerRef.current;
     if (!el) return;
-    
     const rect = el.getBoundingClientRect();
     const mx = e.clientX - rect.left - size.w / 2;
     const my = e.clientY - rect.top - size.h / 2;
-    
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     
     setCamera(prev => {
@@ -142,15 +98,9 @@ export const useZoomLogic = (
         }
       };
     });
-  }, [size, containerRef]);
-
-  useEffect(() => {
-    if (onCameraChange) onCameraChange(camera);
-  }, [camera, onCameraChange]);
-
-  return { 
-    offset: camera.offset, zoom: camera.zoom, size, isDragging, 
-    handlePointerDown, handlePointerMove, handlePointerUp, handleWheel, 
-    getSimCoords 
   };
+
+  useEffect(() => { onCameraChange?.(camera); }, [camera, onCameraChange]);
+
+  return { offset: camera.offset, zoom: camera.zoom, size, isDragging, handlePointerDown, handlePointerMove, handlePointerUp, handleWheel, getSimCoords };
 };
