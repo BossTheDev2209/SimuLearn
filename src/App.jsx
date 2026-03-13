@@ -288,6 +288,10 @@ function App() {
       const rawVariables = {
         ...(apiData.variables || {}),
         ...(apiData.calculated_variables || {}),
+        // Harvesting from root as well
+        mass: getVal([apiData.mass, apiData.variables?.mass, apiData.calculated_variables?.mass], 1),
+        height: getVal([apiData.height, apiData.variables?.height, apiData.calculated_variables?.height, apiData.h_start, apiData.variables?.h_start], 10),
+        gravity: getVal([apiData.gravity, apiData.variables?.gravity], 9.8),
         vx: getVal([
           apiData.vx, 
           apiData.variables?.vx, 

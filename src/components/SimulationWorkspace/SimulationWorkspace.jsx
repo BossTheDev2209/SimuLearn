@@ -1,9 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ControlPanel from '../ControlPanel';
-import InteractiveGrid from '../InteractiveGrid';
-import MatterCanvas from '../MatterCanvas';
-import Timebar, { ArrowUpIcon, ArrowDownIcon, RestartIcon, ChevronLeftIcon, ChevronRightIcon } from '../Timebar';
+import ControlPanel from '../ControlPanel/ControlPanel';
+import InteractiveGrid from './InteractiveGrid';
+import MatterCanvas from './MatterCanvas';
+import Timebar, { ArrowUpIcon, ArrowDownIcon, RestartIcon, ChevronLeftIcon, ChevronRightIcon } from './Timebar';
 
 // 🌟 Import Hooks ที่แยกการทำงานออกมา
 import { useSimulationHistory } from './hooks/useSimulationHistory';
