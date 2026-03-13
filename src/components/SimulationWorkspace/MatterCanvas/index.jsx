@@ -6,7 +6,8 @@ import { createPhysicsEngine, createGround, updatePhysics, predictSimulationTime
 const MatterCanvas = forwardRef(({ 
   size, offset, zoom, unitStep, simState, onPhysicsChange, 
   activeTool, spawnConfig, gridSnapping, showCursorCoords, 
-  showResultantVector, timeStateRef, setIsPlaying, maxTime 
+  showResultantVector, timeStateRef, setIsPlaying, maxTime,
+  followedObjectId
 }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
@@ -23,9 +24,10 @@ const MatterCanvas = forwardRef(({
   useEffect(() => {
     loopPropsRef.current = { 
       simState, gridSnapping, showCursorCoords, showResultantVector, 
-      activeTool, spawnConfig, maxTime, size, offset, zoom, unitStep 
+      activeTool, spawnConfig, maxTime, size, offset, zoom, unitStep,
+      followedObjectId 
     };
-  }, [simState, gridSnapping, showCursorCoords, showResultantVector, activeTool, spawnConfig, maxTime, size, offset, zoom, unitStep]);
+  }, [simState, gridSnapping, showCursorCoords, showResultantVector, activeTool, spawnConfig, maxTime, size, offset, zoom, unitStep, followedObjectId]);
 
   // Imperative API for Parent
   useImperativeHandle(ref, () => ({
@@ -186,6 +188,25 @@ const MatterCanvas = forwardRef(({
           ctx.closePath();
           ctx.fillStyle = (body.render?.fillStyle || '#999999') + 'CC'; ctx.fill();
           ctx.strokeStyle = body.render?.fillStyle; ctx.lineWidth = 2; ctx.stroke();
+
+          // 🌟 Focus Ring for Followed Object
+          if (followedObjectId && bodyMap.current.get(followedObjectId) === body) {
+            ctx.beginPath();
+            if (body.label === 'circle') {
+              const c = toScreen(body.position.x, body.position.y); ctx.arc(c.x, c.y, body.circleRadius * pxPerUnit + 4, 0, 2*Math.PI);
+            } else {
+              // Simple box/polygon focus ring (slightly larger)
+              const first = toScreen(body.vertices[0].x, body.vertices[0].y);
+              ctx.moveTo(first.x, first.y);
+              for(let i=1; i<body.vertices.length; i++) { const p = toScreen(body.vertices[i].x, body.vertices[i].y); ctx.lineTo(p.x, p.y); }
+              ctx.closePath();
+            }
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]); // Optional: dashed look? The user said "White Outline (Stroke) or Focus Ring".
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+          }
         });
 
         // Draw Vectors

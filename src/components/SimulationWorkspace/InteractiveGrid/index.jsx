@@ -1,11 +1,11 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useZoomLogic } from './useZoomLogic';
 import GridView, { niceStep } from './GridView';
 
 /**
- * InteractiveGrid component deconstructed for better maintainability.
+ * InteractiveGrid component with Imperative Handle for camera control.
  */
-export default function InteractiveGrid({ 
+const InteractiveGrid = forwardRef(({ 
   children, 
   initialCamera, 
   onCameraChange, 
@@ -15,7 +15,7 @@ export default function InteractiveGrid({
   onGridPointerMove, 
   onGridPointerUp, 
   style = {} 
-}) {
+}, ref) => {
   const containerRef = useRef(null);
   
   // Calculate specific grid step based on zoom
@@ -25,7 +25,8 @@ export default function InteractiveGrid({
 
   const { 
     offset, zoom, size, isDragging, 
-    handlePointerDown, handlePointerMove, handlePointerUp, handleWheel 
+    handlePointerDown, handlePointerMove, handlePointerUp, handleWheel,
+    setCamera, getSimCoords
   } = useZoomLogic(
     containerRef, 
     initialCamera, 
@@ -37,6 +38,12 @@ export default function InteractiveGrid({
     onGridClick, 
     unitStep
   );
+
+  // Expose setCamera to parents (for Following feature)
+  useImperativeHandle(ref, () => ({
+    setCamera,
+    getSimCoords
+  }));
 
   // Add Wheel event manually to support non-passive scrolling
   useEffect(() => {
@@ -68,4 +75,6 @@ export default function InteractiveGrid({
       {typeof children === 'function' ? children({ size, offset, zoom, unitStep }) : children}
     </div>
   );
-}
+});
+
+export default InteractiveGrid;

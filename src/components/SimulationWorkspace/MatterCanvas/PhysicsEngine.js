@@ -26,36 +26,28 @@ export const createGround = () => {
 };
 
 /**
- * Performs a single physics step with custom logic (Hard Stop, Forces, Velocity Threshold).
+ * Performs a single physics step with custom logic (Settling/Grounded Stop, Forces).
  */
 export const updatePhysics = (engine, dt, state, bodyMap, maxTime, timeState, setIsPlaying) => {
   if (!timeState.isPlaying) return;
 
-  // 1. Hard Stop Logic (Absolute)
-  if (timeState.time >= (maxTime || Infinity)) {
-    timeState.time = maxTime;
-    timeState.isPlaying = false;
-    setIsPlaying(false);
-    
-    // Force absolute stop: set all non-static velocities to zero
-    Matter.Composite.allBodies(engine.world).forEach(body => {
-      if (!body.isStatic) Matter.Body.setVelocity(body, { x: 0, y: 0 });
-    });
-    return;
-  }
-
-  // 2. Apply Custom Forces
+  // 1. Calculate Grounded State for all objects
+  let allSettled = true;
   if (state?.objects) {
     for (const obj of state.objects) {
       if (!obj.isSpawned) continue;
       const body = bodyMap.get(obj.id);
       if (!body) continue;
 
-      // 🌟 Velocity Threshold to prevent sliding (Phase 1 fix)
+      const radius = (body.circleRadius || body.plugin?.size / 2 || 0.5);
+      const distFromGround = Math.abs(body.position.y - radius);
       const speedSq = body.velocity.x ** 2 + body.velocity.y ** 2;
-      const distFromGround = Math.abs(body.position.y - (body.circleRadius || body.plugin?.size / 2 || 0));
+
+      // 🌟 Settlement Logic: If close to ground and slow, snap to stop
       if (speedSq < 0.01 && distFromGround < 0.05) {
         Matter.Body.setVelocity(body, { x: 0, y: 0 });
+      } else {
+        allSettled = false;
       }
 
       // Apply assigned forces
@@ -73,20 +65,16 @@ export const updatePhysics = (engine, dt, state, bodyMap, maxTime, timeState, se
     }
   }
 
+  // 2. Stop Simulation if all objects are grounded/settled (or maxTime safety hit)
+  if ((allSettled && timeState.time > 0.5) || timeState.time >= (maxTime * 1.5 || 30)) {
+    timeState.isPlaying = false;
+    setIsPlaying(false);
+    return;
+  }
+
   // 3. System Update
   Matter.Engine.update(engine, dt * 1000); 
   timeState.time += dt;
-
-  // 4. Auto-stop if energy vanishes
-  const allBodies = Matter.Composite.allBodies(engine.world).filter((b) => !b.isStatic);
-  let totalEnergy = 0;
-  for (const b of allBodies) {
-    totalEnergy += 0.5 * b.mass * (b.velocity.x ** 2 + b.velocity.y ** 2);
-  }
-  if (totalEnergy < 0.00001 && timeState.time > 0.5) {
-    timeState.isPlaying = false;
-    setIsPlaying(false);
-  }
 };
 
 /**
@@ -94,30 +82,39 @@ export const updatePhysics = (engine, dt, state, bodyMap, maxTime, timeState, se
  */
 export const predictSimulationTime = (simState) => {
   if (!simState || !simState.objects) return 10.0;
-  const g = (simState.gravity || 9.8) / 10; // Scaled for Matter.js
+  // Matter.js gravity scale to world units: typically ~1.0 in Matter = 9.8 in sim
+  const g = (simState.gravity || 9.8) / 9.8; 
   let maxT = 0;
 
   simState.objects.forEach(obj => {
     if (!obj.isSpawned) return;
     
     const radius = (obj.shape === 'circle' ? obj.size : obj.size / 2) || 0.5;
-    const h = (obj.position?.y || 0) - radius;
-    if (h <= 0) return;
+    const h = Math.max(0, (obj.position?.y || 0) - radius);
+    if (h <= 0 && (!obj.values?.velocities || obj.values.velocities.length === 0)) return;
 
-    // Get initial vertical velocity (u)
+    // Get initial vertical velocity (u) - Matter.js Y is down, but our WY is up.
+    // So positive angle in WY (up) means negative Y in Matter.
     let uy = 0;
     const vels = [...(obj.values?.velocities || [])];
     if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
     
     vels.forEach(v => {
-      uy += v.magnitude * Math.sin((v.angle * Math.PI) / 180) * 0.1; // Scale factor matching physics
+      // angle 90 in UI = UP = -Y in Matter. uy should represent speed TOWARDS ground?
+      // Let's use standard h = vy*t + 0.5*g*t^2 where h is distance to ground.
+      // angle 270 in UI = DOWN. sin(270) = -1. So vy = -mag * sin(angle).
+      uy -= v.magnitude * Math.sin((v.angle * Math.PI) / 180) * 0.1; 
     });
 
-    // Solve for t: 0 = h + uy*t - 0.5*g*t^2  => 0.5*g*t^2 - uy*t - h = 0
-    // t = (uy + sqrt(uy^2 + 2*g*h)) / g
-    const t = (uy + Math.sqrt(uy * uy + 2 * g * h)) / g;
-    if (t > maxT) maxT = t;
+    // Solve for t: 0.5*g*t^2 + uy*t - h = 0
+    // t = (-uy + sqrt(uy^2 + 2*g*h)) / g
+    const disc = uy * uy + 2 * g * h;
+    if (disc >= 0) {
+      const t = (-uy + Math.sqrt(disc)) / g;
+      if (t > maxT) maxT = t;
+    }
   });
 
-  return Math.min(Math.max(maxT + 1.5, 5), 30); // Buffer and clamps
+  // Add a generous 20% buffer + 1s for settling. Clamp between 5s and 45s.
+  return Math.min(Math.max(maxT * 1.2 + 1.0, 5), 45);
 };

@@ -14,6 +14,9 @@ export const useWorkspaceState = () => {
     restitution: 0.5
   });
 
+  const [followedObjectId, setFollowedObjectId] = useState(null);
+  const [isFollowMenuOpen, setIsFollowMenuOpen] = useState(false);
+
   const showToast = useCallback((message) => {
     const id = Date.now();
     setSpawnToast({ id, message });
@@ -25,6 +28,8 @@ export const useWorkspaceState = () => {
   const handleToolClick = useCallback((toolId) => {
     if (toolId === 'clearAll') {
       setIsClearModalOpen(true);
+    } else if (toolId === 'focus') {
+      setIsFollowMenuOpen(prev => !prev);
     } else {
       setActiveTool(toolId);
     }
@@ -37,6 +42,8 @@ export const useWorkspaceState = () => {
     isClearModalOpen, setIsClearModalOpen,
     spawnToast, setSpawnToast,
     spawnConfig, setSpawnConfig,
+    followedObjectId, setFollowedObjectId,
+    isFollowMenuOpen, setIsFollowMenuOpen,
     showToast,
     handleToolClick
   };
