@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import Matter from 'matter-js';
 
-const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, timeStateRef, setIsPlaying }, ref) => {
+const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, timeStateRef, setIsPlaying }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const bodyMap = useRef(new Map()); 
@@ -95,11 +95,39 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
           if (b === body) { objId = id; break; }
         }
         if (objId) {
+          // 🌟 Snap start point to object outline
+          let sx = wx, sy = wy;
+          const bodyPos = body.position;
+          const dx = wx - bodyPos.x;
+          const dy = wy - bodyPos.y;
+          const dist = Math.sqrt(dx*dx + dy*dy) || 0.001;
+
+          if (body.label === 'circle') {
+            const radius = body.circleRadius;
+            sx = bodyPos.x + (dx / dist) * radius;
+            sy = bodyPos.y + (dy / dist) * radius;
+          } else {
+            // For polygons/rectangles, find closest point on boundary
+            let minDist = Infinity;
+            const verts = body.vertices;
+            for (let i = 0; i < verts.length; i++) {
+              const v1 = verts[i];
+              const v2 = verts[(i + 1) % verts.length];
+              const p = closestPointOnSegment(wx, wy, v1.x, v1.y, v2.x, v2.y);
+              const d = Math.sqrt((wx - p.x)**2 + (wy - p.y)**2);
+              if (d < minDist) {
+                minDist = d;
+                sx = p.x;
+                sy = p.y;
+              }
+            }
+          }
+
           drawingVectorRef.current = {
             type: activeTool,
             objId,
-            startX: wx, // 🌟 Start from exactly where clicked
-            startY: wy,
+            startX: sx,
+            startY: sy,
             bodyStartX: body.position.x,
             bodyStartY: body.position.y,
             currentX: wx,
@@ -171,6 +199,14 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
     let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
     t = Math.max(0, Math.min(1, t));
     return Math.sqrt((px - (x1 + t * (x2 - x1)))**2 + (py - (y1 + t * (y2 - y1)))**2);
+  };
+
+  const closestPointOnSegment = (px, py, x1, y1, x2, y2) => {
+    const l2 = (x1 - x2)**2 + (y1 - y2)**2;
+    if (l2 === 0) return { x: x1, y: y1 };
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return { x: x1 + t * (x2 - x1), y: y1 + t * (y2 - y1) };
   };
 
   useEffect(() => {
@@ -259,10 +295,10 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
                           if (!obj.isSpawned || !obj.values?.force) continue;
                           const body = bodyMap.current.get(obj.id);
                           if (body) {
-                             const mag = obj.values.force * 0.001; // Scaled to be physics-friendly
+                             const mag = obj.values.force * 0.001; 
                              const ang = obj.values.forceAngle || 0;
                              const fx = mag * Math.cos(ang * Math.PI / 180);
-                             const fy = -mag * Math.sin(ang * Math.PI / 180); // Y inverted
+                             const fy = -mag * Math.sin(ang * Math.PI / 180); 
                              Matter.Body.applyForce(body, body.position, { x: fx, y: fy });
                           }
                        }
@@ -376,7 +412,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         const u = obj.values?.velocity || 0;
         const theta = obj.values?.angle || 0;
         const vx = u * Math.cos(theta * Math.PI / 180);
-        const vy = -u * Math.sin(theta * Math.PI / 180);
+        const vy = -u * Math.sin(theta * Math.PI / 180); 
         Matter.Body.setVelocity(newBody, { x: vx, y: vy });
 
         Matter.Composite.add(engine.world, newBody);
@@ -426,7 +462,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
            
            if (trackedStr !== currentStr) {
                const vx = mag * Math.cos(ang * Math.PI / 180);
-               const vy = -mag * Math.sin(ang * Math.PI / 180); // Y is inverted in Matter.js
+               const vy = -mag * Math.sin(ang * Math.PI / 180); 
                Matter.Body.setVelocity(body, { x: vx, y: vy });
                lastAppliedVelocityRef.current.set(obj.id, currentStr);
            }
@@ -620,8 +656,9 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
       if (gridSnapping && mouseRef.current.x > -1000) {
         let wx = (mouseRef.current.x - ox) / pxPerUnit;
         let wy = (oy - mouseRef.current.y) / pxPerUnit;
-        const snappedWx = Math.round(wx);
-        const snappedWy = Math.round(wy);
+        const us = unitStep || 1;
+        const snappedWx = Math.round(wx / us) * us;
+        const snappedWy = Math.round(wy / us) * us;
         const sx = ox + snappedWx * pxPerUnit;
         const sy = oy - snappedWy * pxPerUnit;
 
@@ -645,8 +682,9 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         if (gridSnapping) {
           const wx = (mx - ox) / pxPerUnit;
           const wy = (oy - my) / pxPerUnit;
-          const snappedWx = Math.round(wx);
-          const snappedWy = Math.round(wy);
+          const us = unitStep || 1;
+          const snappedWx = Math.round(wx / us) * us;
+          const snappedWy = Math.round(wy / us) * us;
           mx = ox + snappedWx * pxPerUnit;
           my = oy - snappedWy * pxPerUnit;
         }
@@ -683,8 +721,9 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         
         // Match the hologram snap behavior
         if (gridSnapping) {
-           wx = Math.round(wx);
-           wy = Math.round(wy);
+           const us = unitStep || 1;
+           wx = Math.round(wx / us) * us;
+           wy = Math.round(wy / us) * us;
            // visually stick tooltip to the snapped grid intersection point
            mx = ox + wx * pxPerUnit;
            my = oy - wy * pxPerUnit;

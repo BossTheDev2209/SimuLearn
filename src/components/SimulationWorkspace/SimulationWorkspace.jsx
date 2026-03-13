@@ -228,13 +228,13 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   };
 
   // 🌟 4. Grid click handler — with optional grid snapping
-  const handleGridClick = useCallback((wx, wy) => {
+  const handleGridClick = useCallback((wx, wy, unitStep = 1) => {
     if (activeTool === 'add') {
 
       // Apply grid snapping: round to nearest integer world unit
       const snapped = simState?.gridSnapping;
-      const fx = snapped ? Math.round(wx) : wx;
-      const fy = snapped ? Math.round(wy) : wy;
+      const fx = snapped ? Math.round(wx / unitStep) * unitStep : wx;
+      const fy = snapped ? Math.round(wy / unitStep) * unitStep : wy;
 
       // Physics body radius = obj.size world units. Use 1.1x padding.
       const overlapRadiusBase = 1.1;
@@ -326,32 +326,39 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     }
   }, [activeTool, spawnConfig, simState, onSaveControlState]);
 
-  const handleGridPointerDown = useCallback((wx, wy, e) => {
+  const handleGridPointerDown = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
       let nx = wx, ny = wy;
       if (simState?.gridSnapping) {
-         nx = Math.round(wx);
-         ny = Math.round(wy);
+         nx = Math.round(wx / unitStep) * unitStep;
+         ny = Math.round(wy / unitStep) * unitStep;
       }
-      return matterCanvasRef.current?.startVectorDrag(nx, ny, activeTool) || false;
+      const hit = matterCanvasRef.current?.startVectorDrag(nx, ny, activeTool);
+      // If we hit an object, consume the event so grid doesn't pan
+      return hit || false;
     }
     return false;
   }, [activeTool, simState?.gridSnapping]);
 
-  const handleGridPointerMove = useCallback((wx, wy, e) => {
+  const handleGridPointerMove = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
       let nx = wx, ny = wy;
       if (simState?.gridSnapping) {
-         nx = Math.round(wx);
-         ny = Math.round(wy);
+         nx = Math.round(wx / unitStep) * unitStep;
+         ny = Math.round(wy / unitStep) * unitStep;
       }
       matterCanvasRef.current?.moveVectorDrag(nx, ny);
     }
   }, [activeTool, simState?.gridSnapping]);
 
-  const handleGridPointerUp = useCallback((wx, wy, e) => {
+  const handleGridPointerUp = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
-      const v = matterCanvasRef.current?.endVectorDrag(wx, wy);
+      let nx = wx, ny = wy;
+      if (simState?.gridSnapping) {
+         nx = Math.round(wx / unitStep) * unitStep;
+         ny = Math.round(wy / unitStep) * unitStep;
+      }
+      const v = matterCanvasRef.current?.endVectorDrag(nx, ny);
       if (v) {
         const dx = v.currentX - v.startX;
         const dy = v.currentY - v.startY;
@@ -548,16 +555,17 @@ return (
                 initialCamera={activeSim.physicsState?.camera} 
                 onCameraChange={handleCameraChange} 
                 activeTool={activeTool} 
-                onGridClick={handleGridClick}
-                onGridPointerDown={handleGridPointerDown}
-                onGridPointerMove={handleGridPointerMove}
-                onGridPointerUp={handleGridPointerUp}
+                onGridClick={(wx, wy, us) => handleGridClick(wx, wy)}
+                onGridPointerDown={(wx, wy, e, us) => handleGridPointerDown(wx, wy, e, us)}
+                onGridPointerMove={(wx, wy, e, us) => handleGridPointerMove(wx, wy, e, us)}
+                onGridPointerUp={(wx, wy, e, us) => handleGridPointerUp(wx, wy, e, us)}
               >
-                {({ size, offset, zoom }) => (
+                {({ size, offset, zoom, unitStep }) => (
                   <>
                     <MatterCanvas 
                       ref={matterCanvasRef}
                       size={size} offset={offset} zoom={zoom} 
+                      unitStep={unitStep}
                       simState={simState} initialPhysics={activeSim.physicsState} 
                       onPhysicsChange={handlePhysicsChange} activeTool={activeTool} 
                       spawnConfig={spawnConfig}

@@ -62,7 +62,7 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
     const coords = getSimCoords(e);
     let consumed = false;
     if (onGridPointerDown) {
-      consumed = onGridPointerDown(coords.wx, coords.wy, e);
+      consumed = onGridPointerDown(coords.wx, coords.wy, e, unitStep);
     }
 
     if (activeTool === 'cursor' || !consumed) {
@@ -71,12 +71,12 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
       offsetStart.current = { ...offset };
       e.currentTarget.setPointerCapture(e.pointerId);
     }
-  }, [offset, activeTool, getSimCoords, onGridPointerDown]);
+  }, [offset, activeTool, getSimCoords, onGridPointerDown, unitStep]);
 
   const handlePointerMove = useCallback((e) => {
     if (onGridPointerMove) {
       const coords = getSimCoords(e);
-      onGridPointerMove(coords.wx, coords.wy, e);
+      onGridPointerMove(coords.wx, coords.wy, e, unitStep);
     }
 
     if (!dragging.current) return;
@@ -86,12 +86,12 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
       x: offsetStart.current.x + dx,
       y: offsetStart.current.y + dy,
     });
-  }, [activeTool, offsetStart, onGridPointerMove, getSimCoords]);
+  }, [activeTool, offsetStart, onGridPointerMove, getSimCoords, unitStep]);
 
   const handlePointerUp = useCallback((e) => {
     if (onGridPointerUp) {
       const coords = getSimCoords(e);
-      onGridPointerUp(coords.wx, coords.wy, e);
+      onGridPointerUp(coords.wx, coords.wy, e, unitStep);
     }
 
     const wasDragging = dragging.current;
@@ -104,11 +104,11 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
       if (!wasDragging || Math.sqrt(dx*dx + dy*dy) < 5) {
           const coords = getSimCoords(e);
           if (onGridClick) {
-              onGridClick(coords.wx, coords.wy);
+              onGridClick(coords.wx, coords.wy, unitStep);
           }
       }
     }
-  }, [activeTool, getSimCoords, onGridPointerUp, onGridClick]);
+  }, [activeTool, getSimCoords, onGridPointerUp, onGridClick, unitStep]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -231,7 +231,7 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
           </text>
         ))}
       </svg>
-      {typeof children === 'function' ? children({ size, offset, zoom }) : children}
+      {typeof children === 'function' ? children({ size, offset, zoom, unitStep }) : children}
     </div>
   );
 }

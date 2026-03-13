@@ -5,10 +5,19 @@ export const SimulationRegistry = {
     name: 'การตกแบบเสรี (Free Fall)',
     
     parseData: (variables) => {
-      const { vx = 0, vy = 0, h_start = 10, mass = 1, gravity = 9.8 } = variables;
+      const { 
+        vx = 0, 
+        vy = 0, 
+        velocity: b_velocity, 
+        angle: b_angle, 
+        h_start = 10, 
+        mass = 1, 
+        gravity = 9.8 
+      } = variables;
       
-      const velocity = Math.sqrt(vx * vx + vy * vy);
-      const angle = Math.atan2(vy, vx) * (180 / Math.PI);
+      // แต่ถ้าไม่มี (ส่งแค่ vx, vy) ทำ Trigonometry เอง
+      const velocity = b_velocity !== undefined ? Number(b_velocity) : Math.sqrt(vx * vx + vy * vy);
+      const angle = b_angle !== undefined ? Number(b_angle) : (Math.atan2(vy, vx) * (180 / Math.PI));
 
       return {
         gravity: gravity,
