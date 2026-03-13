@@ -128,25 +128,11 @@ export default function Sidebar({
                 
                 {/* 🌟 แสดง Skeleton ตอนกำลังโหลด — shimmer animation */}
                 {isHistoryLoading ? (
-                  <div className="flex flex-col gap-2 mt-1 px-1">
-                    {[
-                      { w: '85%' },
-                      { w: '65%' },
-                      { w: '92%' },
-                      { w: '55%' },
-                      { w: '75%' },
-                    ].map((item, i) => (
-                      <div key={i} className="flex items-center h-10 px-2 rounded-lg">
-                        {/* ไอคอนกลมๆ หน้าชื่อ */}
-                        <div 
-                          className="w-5 h-5 rounded-full bg-gray-300 dark:bg-[#3F4147] animate-pulse shrink-0"
-                          style={{ animationDelay: `${i * 100}ms` }}
-                        />
-                        {/* แท่งข้อความยาวๆ */}
-                        <div
-                          className="h-3.5 bg-gray-300 dark:bg-[#3F4147] rounded-full animate-pulse ml-3"
-                          style={{ width: item.w, animationDelay: `${i * 100}ms` }}
-                        />
+                  <div className="flex flex-col gap-1 mt-1 px-1">
+                    {[75, 55, 90, 45, 65].map((w, i) => (
+                      <div key={i} className="flex items-center h-10 px-3 rounded-lg mb-1">
+                        <div className="w-5 h-5 rounded-full skeleton-shimmer shrink-0" />
+                        <div className="h-3.5 skeleton-shimmer rounded-full ml-3" style={{ width: `${w}%` }} />
                       </div>
                     ))}
                   </div>

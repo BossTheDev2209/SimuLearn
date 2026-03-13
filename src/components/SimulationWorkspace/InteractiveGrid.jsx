@@ -16,15 +16,28 @@ function formatLabel(value) {
   return String(rounded);
 }
 
-export default function InteractiveGrid({ children, initialCamera, onCameraChange, activeTool = 'cursor', onGridClick, onGridPointerDown, onGridPointerMove, onGridPointerUp }) {
+export default function InteractiveGrid({ children, initialCamera, onCameraChange, activeTool = 'cursor', onGridClick, onGridPointerDown, onGridPointerMove, onGridPointerUp, style = {} }) {
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
 
   const [offset, setOffset] = useState(initialCamera?.offset || { x: 0, y: 0 });
   const [zoom, setZoom] = useState(initialCamera?.zoom || 1);
   const dragging = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const offsetStart = useRef({ x: 0, y: 0 });
+
+  // 🌟 Derived grid values (moved to top to avoid ReferenceError in callbacks)
+  const { w, h } = size;
+  const ox = w / 2 + offset.x;
+  const oy = h / 2 + offset.y;
+  const basePixelsPerUnit = 50; 
+  const pxPerUnit = basePixelsPerUnit * zoom;
+  const desiredPxGap = 80;
+  const rawUnitStep = desiredPxGap / pxPerUnit;
+  const unitStep = niceStep(rawUnitStep);
+  const pxStep = unitStep * pxPerUnit; 
+  const subStep = pxStep / 5;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -44,16 +57,11 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
     const rect = el.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    const w = size.w;
-    const h = size.h;
-    const ox = w / 2 + offset.x;
-    const oy = h / 2 + offset.y;
-    const pxPerUnit = 50 * zoom;
     return {
       wx: (screenX - ox) / pxPerUnit,
       wy: (oy - screenY) / pxPerUnit
     };
-  }, [size, offset, zoom]);
+  }, [ox, oy, pxPerUnit]);
 
   const handlePointerDown = useCallback((e) => {
     if (e.button !== 0) return; 
@@ -67,6 +75,7 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
 
     if (activeTool === 'cursor' || !consumed) {
       dragging.current = true;
+      setIsDragging(true);
       dragStart.current = { x: e.clientX, y: e.clientY };
       offsetStart.current = { ...offset };
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -96,6 +105,7 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
 
     const wasDragging = dragging.current;
     dragging.current = false;
+    setIsDragging(false);
     
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
@@ -139,16 +149,6 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
     if (onCameraChange) onCameraChange({ offset, zoom });
   }, [offset, zoom, onCameraChange]);
 
-  const { w, h } = size;
-  const ox = w / 2 + offset.x;
-  const oy = h / 2 + offset.y;
-  const basePixelsPerUnit = 50; 
-  const pxPerUnit = basePixelsPerUnit * zoom;
-  const desiredPxGap = 80;
-  const rawUnitStep = desiredPxGap / pxPerUnit;
-  const unitStep = niceStep(rawUnitStep);
-  const pxStep = unitStep * pxPerUnit; 
-  const subStep = pxStep / 5;
   const lines = [];
   const labels = [];
 
@@ -197,8 +197,11 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
       className="absolute inset-0"
       // 🌟 ใช้เป้าเล็ง (Crosshair) ทั้งตอนลบและตอนเพิ่ม
       style={{ 
-        cursor: (activeTool === 'add' || activeTool === 'erase') ? 'crosshair' : (dragging.current ? 'grabbing' : 'grab'), 
-        touchAction: 'none' 
+        cursor: (activeTool === 'add' || activeTool === 'erase' || activeTool === 'velocity' || activeTool === 'force') 
+          ? 'crosshair' 
+          : (isDragging ? 'grabbing' : 'grab'), 
+        touchAction: 'none',
+        ...style
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

@@ -20,8 +20,10 @@ function App() {
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [apiError, setApiError] = useState(null);
 
   const [messages, setMessages] = useState([]);
+  const abortControllerRef = useRef(null);
 
   const [simulations, setSimulations] = useState([]);
   const [activeSimId, setActiveSimId] = useState(() => localStorage.getItem('activeSimId') || null);
@@ -87,7 +89,7 @@ function App() {
       if (!myUserId) return;
       if (!myUserId.startsWith("guest_")) {
         try {
-          const res = await fetch(`https://simulearn-backend.onrender.com/api/history/${myUserId}`);
+          const res = await fetch(`/api/history/${myUserId}`);
           if (!res.ok) throw new Error(`API error: ${res.status}`);
           const apiHistory = await res.json();
 
@@ -139,9 +141,13 @@ function App() {
           });
 
           formattedSimulations.sort((a, b) => b.createdAt - a.createdAt);
+          
+          // 🌟 Replace entire list with sorted, unique ones to prevent duplicates upon refresh
           setSimulations(formattedSimulations);
         } catch (err) {
           console.error("โหลดประวัติจาก API ไม่ขึ้น:", err);
+          // 🌟 สำหรับ History เราจะไม่บล็อกหน้าจอ (ไม่ setApiError) 
+          // เพื่อให้ User ยังเข้าหน้าหลักได้ แม้เซิร์ฟเวอร์จะยังไม่ตื่น
         } finally {
           setIsHistoryLoading(false); //
         }
@@ -253,19 +259,51 @@ function App() {
     setIsLoading(true);
     setMessages((prev) => [...prev, { sender: 'user', text }]);
 
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+
     try {
-      const res = await fetch(`https://simulearn-backend.onrender.com/api/generate-simulation`, {
+      const res = await fetch(`/api/generate-simulation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           prompt: text, 
           userId: myUserId
         }),
+        signal: abortControllerRef.current.signal
       });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
       const apiData = await res.json();    
+      console.log("DEBUG: Backend Response Data ->", apiData); // 🌟 เพิ่มบรรทัดนี้ให้คุณดูใน Console
+
       const simType = apiData.type || apiData.topic_type || 'free_fall';
       const template = getSimulationTemplate(simType);
-      const rawVariables = apiData.variables || apiData.calculated_variables || {};
+      
+      // ดึงค่า vx, vy จากทุกแหล่งที่อาจจะมีได้ (Root, variables, calculated_variables)
+      const getVal = (paths, fallback = 0) => {
+        for (const p of paths) if (p !== undefined && p !== null) return p;
+        return fallback;
+      };
+
+      const rawVariables = {
+        ...(apiData.variables || {}),
+        ...(apiData.calculated_variables || {}),
+        vx: getVal([
+          apiData.vx, 
+          apiData.variables?.vx, 
+          apiData.calculated_variables?.vx, 
+          apiData.variables?.v0_x,
+          apiData.v0_x
+        ], 0),
+        vy: getVal([
+          apiData.vy, 
+          apiData.variables?.vy, 
+          apiData.calculated_variables?.vy, 
+          apiData.variables?.v0_y,
+          apiData.v0_y
+        ], 0)
+      };
+
       const formattedData = {
         simulationType: simType,
         ai_description: apiData.description || apiData.ai_description,
@@ -299,10 +337,19 @@ function App() {
       });
       setActiveSimId(finalId);
     } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log('Simulation generation cancelled by user');
+        return;
+      }
       console.error("ยิง API ไม่ติด:", err);
-      alert("เซิร์ฟเวอร์เปิดหรือยัง?");
+      if (err.message.includes("521") || err.name === "SyntaxError" || err.message.includes("Failed to fetch")) {
+        setApiError("521");
+      } else {
+        alert("เซิร์ฟเวอร์เปิดหรือยัง? หรืออาจเกิดข้อผิดพลาดในการสร้างแบบจำลองครับ");
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -397,10 +444,20 @@ function App() {
   return (
     <div className="app-container relative flex w-full h-screen font-chakra overflow-hidden bg-[#F2F3F5] text-gray-900 dark:bg-[#1E1F22] dark:text-[#DBDEE1] transition-colors duration-300">
       
-      {isLoading && <LoadingSimulation />}
+      {(isLoading || apiError) && (
+        <LoadingSimulation 
+          error={apiError}
+          onCancel={() => { 
+            if (abortControllerRef.current) abortControllerRef.current.abort();
+            setIsLoading(false); 
+            setApiError(null);
+            handleNewSimulation(); 
+          }} 
+        />
+      )}
 
       <Sidebar
-        isLoading={isHistoryLoading}
+        isHistoryLoading={isHistoryLoading}
         simulations={simulations}
         activeSimId={activeSimId}
         userName={myUserName}

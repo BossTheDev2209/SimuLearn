@@ -104,6 +104,7 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
   const [gridSnapping, setGridSnapping] = useState(initialState?.gridSnapping !== undefined ? initialState.gridSnapping : false);
   const [showCursorCoords, setShowCursorCoords] = useState(initialState?.showCursorCoords !== undefined ? initialState.showCursorCoords : false);
   const [showResultantVector, setShowResultantVector] = useState(initialState?.showResultantVector !== undefined ? initialState.showResultantVector : true);
+  const [groundFriction, setGroundFriction] = useState(initialState?.groundFriction !== undefined ? initialState.groundFriction : 0);
 
   // Keep objectCounterRef in sync
   useEffect(() => { objectCounterRef.current = objectCounter; }, [objectCounter]);
@@ -138,10 +139,10 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
 
   useEffect(() => {
     if (onUpdate) {
-      onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector });
+      onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector]);
+  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction]);
 
   const [pickPending, setPickPending] = useState(false);
   const [pendingColor, setPendingColor] = useState('#22C55E');
@@ -166,6 +167,17 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
 
   const updateObjectValue = useCallback((objId, key, value) => {
     setObjects((prev) => prev.map((o) => (o.id === objId ? { ...o, values: { ...o.values, [key]: value } } : o)));
+  }, []);
+
+  const removeObjectValue = useCallback((objId, key, index) => {
+    setObjects((prev) => prev.map((o) => {
+      if (o.id === objId) {
+        const arr = [...(o.values?.[key] || [])];
+        arr.splice(index, 1);
+        return { ...o, values: { ...o.values, [key]: arr } };
+      }
+      return o;
+    }));
   }, []);
 
   const removeObject = useCallback((objId) => {
@@ -320,6 +332,49 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
                   ลบออกจากฉาก
                 </button>
 
+                {/* 🌟 Vector Outline (List of vectors) */}
+                <div className="mt-3 bg-gray-50 dark:bg-[#1E1F22] rounded-lg p-2 border border-theme-border">
+                  <div className="flex justify-between items-center mb-1.5 px-1">
+                    <span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider">Vectors Outline</span>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1">
+                    {/* Velocity Vectors */}
+                    {(obj.values?.velocities || []).map((v, i) => (
+                      <div key={`v-${i}`} className="flex items-center gap-2 group">
+                        <div className="w-2 h-2 rounded-full bg-blue-500 shadow-sm" />
+                        <span className="text-[11px] text-theme-primary font-bold">V {i+1}:</span>
+                        <span className="text-[11px] text-theme-muted">{v.magnitude}m/s , {v.angle}°</span>
+                        <button 
+                          onClick={() => removeObjectValue(obj.id, 'velocities', i)}
+                          className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                    
+                    {/* Force Vectors */}
+                    {(obj.values?.forces || []).map((f, i) => (
+                      <div key={`f-${i}`} className="flex items-center gap-2 group">
+                        <div className="w-2 h-2 rounded-full bg-red-500 shadow-sm" />
+                        <span className="text-[11px] text-theme-primary font-bold">F {i+1}:</span>
+                        <span className="text-[11px] text-theme-muted">{f.magnitude}N , {f.angle}°</span>
+                        <button 
+                          onClick={() => removeObjectValue(obj.id, 'forces', i)}
+                          className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                    ))}
+
+                    {!(obj.values?.velocities?.length) && !(obj.values?.forces?.length) && (
+                      <span className="text-[10px] text-theme-muted italic px-1 opacity-60">ไม่มีเวกเตอร์แปรผัน</span>
+                    )}
+                  </div>
+                </div>
+
                 {/* Separator between objects */}
                 {idx < objects.length - 1 && (
                   <div className="border-b border-theme-border mt-3 mb-4" />
@@ -344,6 +399,17 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
             max={30}
             step={0.1}
             onChange={setGravity}
+            disabled={isLocked}
+          />
+
+          <SliderRow
+            label="แรงเสียดทานจากพื้น (μ)"
+            unit=""
+            value={groundFriction}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={setGroundFriction}
             disabled={isLocked}
           />
 

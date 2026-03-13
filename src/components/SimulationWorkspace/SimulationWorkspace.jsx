@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ControlPanel from '../ControlPanel';
 import InteractiveGrid from './InteractiveGrid';
 import MatterCanvas from './MatterCanvas';
-import Timebar, { ArrowUpIcon, ArrowDownIcon } from './Timebar';
+import Timebar, { ArrowUpIcon, ArrowDownIcon, RestartIcon, ChevronLeftIcon, ChevronRightIcon } from './Timebar';
 
 // 🌟 Component แยกที่นำกลับมาใช้ซ้ำได้
 const HoldableButton = ({ onAction, className, children, title, tabIndex }) => {
@@ -52,17 +52,54 @@ const SharedSlider = ({ label, value, min, max, step, onChange }) => (
   </div>
 );
 
+const ClockIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+);
+
 export default function SimulationWorkspace({ activeSim, isInteracting, onSaveControlState, onSavePhysicsState }) {
   const shouldHideLogo = isInteracting || activeSim !== null;
   const [simState, setSimState] = useState(null);
   const [vectorEditor, setVectorEditor] = useState(null);
+  const [isTimelineCollapsed, setIsTimelineCollapsed] = useState(false);
 
   // --- Timebar integration states ---
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStartedOnce, setHasStartedOnce] = useState(false); 
   const [timeScale, setTimeScale] = useState(1);
   const [displayTime, setDisplayTime] = useState(0);
+  const [maxTime, setMaxTime] = useState(0); 
   const snapshotRef = useRef(null); 
+
+  // --- Undo / Redo ---
+  const historyRef = useRef([]);
+  const redoStackRef = useRef([]);
+
+  const pushToHistory = useCallback((state) => {
+    if (!state) return;
+    historyRef.current.push(JSON.parse(JSON.stringify(state)));
+    if (historyRef.current.length > 50) historyRef.current.shift();
+    redoStackRef.current = []; 
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyRef.current.length === 0) return;
+    const previous = historyRef.current.pop();
+    redoStackRef.current.push(JSON.parse(JSON.stringify(simState)));
+    setSimState(previous);
+    if (onSaveControlState) onSaveControlState(previous);
+  }, [simState, onSaveControlState]);
+
+  const redo = useCallback(() => {
+    if (redoStackRef.current.length === 0) return;
+    const next = redoStackRef.current.pop();
+    historyRef.current.push(JSON.parse(JSON.stringify(simState)));
+    setSimState(next);
+    if (onSaveControlState) onSaveControlState(next);
+  }, [simState, onSaveControlState]);
+
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  useEffect(() => { undoRef.current = undo; redoRef.current = redo; }, [undo, redo]);
 
   // --- State สำหรับ ถังขยะ และ Tooltip (Toast) ---
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
@@ -77,12 +114,38 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     if (isPlaying) setVectorEditor(null);
   }, [isPlaying]);
   useEffect(() => { timeStateRef.current.timeScale = timeScale; }, [timeScale]);
+  
+  // Sync simState back to App whenever it changes (Throttled if needed, but App uses a timeout anyway)
+  useEffect(() => {
+    if (simState && onSaveControlState) {
+      onSaveControlState(simState);
+    }
+  }, [simState, onSaveControlState]);
+
+  const updateVectorValue = useCallback((objId, type, index, changes) => {
+    setSimState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        objects: prev.objects.map(o => {
+          if (o.id !== objId) return o;
+          const values = { ...o.values };
+          const key = type === 'velocity' ? 'velocities' : 'forces';
+          const arr = [...(values[key] || [])];
+          if (arr[index]) {
+            arr[index] = { ...arr[index], ...changes };
+          }
+          values[key] = arr;
+          return { ...o, values };
+        })
+      };
+    });
+  }, []);
 
   // Spacebar = Play / Pause, R = Restart
-  // Use refs so listener is registered only once on mount
   const hasStartedOnceRef = useRef(hasStartedOnce);
   useEffect(() => { hasStartedOnceRef.current = hasStartedOnce; }, [hasStartedOnce]);
-  const handleRestartRef = useRef(null); // will point to handleRestart after it's defined below
+  const handleRestartRef = useRef(null);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -101,11 +164,19 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
         e.preventDefault();
         handleRestartRef.current?.();
       }
+
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+        e.preventDefault();
+        if (e.shiftKey) redoRef.current?.();
+        else undoRef.current?.();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
+        e.preventDefault();
+        redoRef.current?.();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  // Only register once on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [isToolbarOpen, setIsToolbarOpen] = useState(true);
@@ -122,35 +193,41 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const cameraRef = useRef(activeSim?.physicsState?.camera || { zoom: 1, offset: {x:0, y:0} });
   const bodiesRef = useRef(activeSim?.physicsState?.bodies || {});
   const matterCanvasRef = useRef(null);
-  const controlPanelRef = useRef(null); // Imperative handle to ControlPanel
-  const [restartToken, setRestartToken] = useState(0); // Increment to remount ControlPanel
+  const controlPanelRef = useRef(null);
+  const [restartToken, setRestartToken] = useState(0);
 
-  // 🌟 3. แก้บัคกระพริบ/ค้างตอนปรับขนาด
   const handleControlUpdate = useCallback((state) => {
-    // ใช้ stringify เช็คว่าค่าเปลี่ยนจริงๆ ถึงจะอนุญาตให้อัปเดต State (กันลูปนรก)
     setSimState(prev => {
       if (JSON.stringify(prev) === JSON.stringify(state)) return prev;
       return state;
     });
-    if (onSaveControlState) onSaveControlState(state);
-  }, [onSaveControlState]);
+  }, []);
 
-  // Handle local UI rendering for the time counter (optimizing re-renders)
   useEffect(() => {
     let animationFrameId;
     const updateTimeDisplay = () => {
-      setDisplayTime(timeStateRef.current.time);
+      const curTime = timeStateRef.current.time;
+      setDisplayTime(curTime);
       animationFrameId = requestAnimationFrame(updateTimeDisplay);
     };
     animationFrameId = requestAnimationFrame(updateTimeDisplay);
     return () => cancelAnimationFrame(animationFrameId);
   }, []);
 
+  // 🌟 Auto-predict simulation end time when simState changes
+  useEffect(() => {
+    if (!matterCanvasRef.current || isPlaying) return;
+    const timer = setTimeout(() => {
+       const predicted = matterCanvasRef.current.predictSimulationTime?.();
+       if (predicted !== undefined) setMaxTime(predicted);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [simState, isPlaying]);
+
   const handleTogglePlay = () => {
     if (!hasStartedOnce) setHasStartedOnce(true);
     const next = !timeStateRef.current.isPlaying;
     
-    // 🌟 Save snapshot before starting simulation
     if (next && !timeStateRef.current.isPlaying) {
       snapshotRef.current = {
         simState: JSON.parse(JSON.stringify(simState))
@@ -168,7 +245,6 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     setIsPlaying(false);
     setDisplayTime(0);
 
-    // 🌟 Roll back properties to the snapshot before "Play"
     if (snapshotRef.current) {
       const restored = snapshotRef.current.simState;
       setSimState(restored);
@@ -177,10 +253,8 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
 
     if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
   };
-  // Keep ref in sync so the keyboard shortcut always calls the latest version
   handleRestartRef.current = handleRestart;
 
-  // 🌟 2. รองรับการกรอเวลากลับ (Rewind) ผ่านเลขที่พิมพ์
   const handleSeek = (val) => {
     timeStateRef.current.isPlaying = false;
     setIsPlaying(false);
@@ -209,38 +283,32 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       setIsClearModalOpen(true);
     } else {
       setActiveTool(toolId);
-      setVectorEditor(null); // Clear vector editor when changing tools
+      setVectorEditor(null);
     }
   };
 
   const handleClearAllConfirm = () => {
-    // Route through ControlPanel so it stays the single owner of object state
+    pushToHistory(simState);
     if (controlPanelRef.current?.clearAll) {
       controlPanelRef.current.clearAll();
     }
     setIsClearModalOpen(false);
   };
 
-  // ฟังก์ชันโชว์แจ้งเตือน
   const showToast = (message) => {
     setSpawnToast({ message, id: Date.now() });
-    setTimeout(() => setSpawnToast(null), 3000); // ปิดเองใน 3 วิ
+    setTimeout(() => setSpawnToast(null), 3000);
   };
 
-  // 🌟 4. Grid click handler — with optional grid snapping
   const handleGridClick = useCallback((wx, wy, unitStep = 1) => {
     if (activeTool === 'add') {
-
-      // Apply grid snapping: round to nearest integer world unit
       const snapped = simState?.gridSnapping;
       const fx = snapped ? Math.round(wx / unitStep) * unitStep : wx;
       const fy = snapped ? Math.round(wy / unitStep) * unitStep : wy;
 
-      // Physics body radius = obj.size world units. Use 1.1x padding.
       const overlapRadiusBase = 1.1;
       const requiredRadius = spawnConfig.size * overlapRadiusBase;
 
-      // Check if click position overlaps any existing object
       const currentObjects = simState?.objects || [];
       const currentBodies = bodiesRef.current || {};
       for (const obj of currentObjects) {
@@ -256,7 +324,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
         }
       }
 
-      // Spawn at final position
+      pushToHistory(simState);
       const newObj = {
         id: 'obj_' + Date.now(),
         shape: spawnConfig.shape,
@@ -264,7 +332,11 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
         color: spawnConfig.color,
         isSpawned: true,
         position: { x: fx, y: fy },
-        values: { mass: spawnConfig.mass, restitution: spawnConfig.restitution }
+        values: { 
+          mass: spawnConfig.mass, 
+          restitution: spawnConfig.restitution,
+          height: fy
+        }
       };
       if (controlPanelRef.current?.addObject) {
         controlPanelRef.current.addObject(newObj);
@@ -274,25 +346,31 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       const currentObjects = simState?.objects || [];
       const currentBodies = bodiesRef.current || {};
       
-      // 🌟 Check if clicking a VECTOR first
       const vectorHit = matterCanvasRef.current?.findVectorAt(wx, wy);
       if (vectorHit) {
-        setSimState(prev => {
-          const newState = {
+        pushToHistory(simState);
+        
+        const applyVectorDelete = (prev) => {
+          return {
             ...prev,
             objects: prev.objects.map(o => {
-              if (o.id === vectorHit.objId) {
-                const newValues = { ...o.values };
-                if (vectorHit.type === 'velocity') { delete newValues.velocity; delete newValues.angle; }
-                if (vectorHit.type === 'force') { delete newValues.force; delete newValues.forceAngle; }
-                return { ...o, values: newValues };
+              if (o.id !== vectorHit.objId) return o;
+              const values = { ...o.values };
+              if (vectorHit.isLegacy) {
+                 if (vectorHit.type === 'velocity') { delete values.velocity; delete values.angle; }
+                 else { delete values.force; delete values.forceAngle; }
+              } else {
+                 const key = vectorHit.type === 'velocity' ? 'velocities' : 'forces';
+                 const arr = [...(values[key] || [])];
+                 arr.splice(vectorHit.index, 1);
+                 values[key] = arr;
               }
-              return o;
+              return { ...o, values };
             })
           };
-          if (onSaveControlState) onSaveControlState(newState);
-          return newState;
-        });
+        };
+
+        setSimState(applyVectorDelete);
         return;
       }
 
@@ -314,13 +392,12 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       }
 
       if (targetId) {
+         pushToHistory(simState);
          setSimState(prev => {
-            const newState = {
+            return {
                ...prev,
                objects: prev.objects.filter(o => o.id !== targetId)
             };
-            if (onSaveControlState) onSaveControlState(newState);
-            return newState;
          });
       }
     }
@@ -333,8 +410,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
          nx = Math.round(wx / unitStep) * unitStep;
          ny = Math.round(wy / unitStep) * unitStep;
       }
-      const hit = matterCanvasRef.current?.startVectorDrag(nx, ny, activeTool);
-      // If we hit an object, consume the event so grid doesn't pan
+      const hit = matterCanvasRef.current?.startVectorDrag(nx, ny, activeTool, wx, wy);
       return hit || false;
     }
     return false;
@@ -364,33 +440,42 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
         const dy = v.currentY - v.startY;
         const dragDist = Math.sqrt(dx*dx + dy*dy);
         
-        // Find existing object
         const obj = simState?.objects?.find(o => o.id === v.objId);
         if (!obj) return;
         
         let magnitude, angle;
-        if (dragDist < 0.2) { // just a click
-          magnitude = activeTool === 'velocity' ? (obj.values?.velocity || 0) : (obj.values?.force || 0);
-          angle = activeTool === 'velocity' ? (obj.values?.angle || 0) : (obj.values?.forceAngle || 0);
-        } else {
-          // multiplier 5 matches the matter canvas scale 0.2
-          magnitude = Math.round(dragDist * 5 * 10) / 10; 
-          angle = Math.round(Math.atan2(dy, dx) * (180 / Math.PI));
-          if (v.type === 'velocity') {
-             controlPanelRef.current?.updateObjectValues(v.objId, { velocity: magnitude, angle: angle });
-          } else {
-             controlPanelRef.current?.updateObjectValues(v.objId, { force: magnitude, forceAngle: angle });
-          }
+        magnitude = Math.round(dragDist * 5 * 10) / 10; 
+        angle = Math.round(Math.atan2(dy, dx) * (180 / Math.PI));
+
+        if (dragDist > 0.1) {
+          pushToHistory(simState);
+          
+          let vIdx = 0;
+          setSimState(prev => {
+            return {
+              ...prev,
+              objects: prev.objects.map(o => {
+                if (o.id !== v.objId) return o;
+                const values = { ...o.values };
+                const key = v.type === 'velocity' ? 'velocities' : 'forces';
+                const arr = [...(values[key] || [])];
+                vIdx = arr.length;
+                values[key] = [...arr, { magnitude, angle }];
+                return { ...o, values };
+              })
+            };
+          });
+
+          setVectorEditor({ 
+             objId: v.objId, 
+             type: v.type, 
+             index: vIdx,
+             magnitude, 
+             angle, 
+             screenX: e.clientX, 
+             screenY: e.clientY 
+          });
         }
-        
-        setVectorEditor({ 
-           objId: v.objId, 
-           type: activeTool, 
-           magnitude, 
-           angle, 
-           screenX: e.clientX, 
-           screenY: e.clientY 
-        });
       } else {
         setVectorEditor(null);
       }
@@ -406,11 +491,11 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     { id: 'erase', title: 'ลบวัตถุ (E)', icon: <><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></> },
     { id: 'velocity', title: 'เวกเตอร์ความเร็ว', color: 'text-blue-500', icon: <><path d="M7 7h10v10"/><path d="M7 17 17 7"/></> },
     { id: 'force', title: 'เวกเตอร์แรง', color: 'text-red-500', icon: <><path d="M7 7h10v10"/><path d="M7 17 17 7"/></> },
-    { type: 'divider' }, // ตัวคั่น
+    { type: 'divider' },
     { id: 'clearAll', title: 'ลบวัตถุทั้งหมด', color: 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30', icon: <><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></> }
   ];
 
-return (
+  return (
     <div className="flex-1 flex flex-col h-full w-full relative">
       <AnimatePresence>
         {!shouldHideLogo && (
@@ -425,7 +510,6 @@ return (
         )}
       </AnimatePresence>
 
-      {/* 🌟 Toast แจ้งเตือนเสกไม่ได้ (จะเด้งตรงกลางจอ) */}
       <AnimatePresence>
         {spawnToast && (
           <motion.div 
@@ -465,10 +549,7 @@ return (
 
             <div className="flex-1 rounded-2xl overflow-hidden border border-theme-border bg-white dark:bg-[#2B2D31] relative shadow-sm">
               
-              {/* แถบเครื่องมือ */}
               <div className="absolute top-4 left-4 z-50 flex gap-2 items-start pointer-events-none">
-                
-                {/* กล่อง Toolbar */}
                 <div 
                   className={`pointer-events-auto flex flex-col items-center bg-[#E5DDD4] dark:bg-[#313338] border border-theme-border rounded-[14px] shadow-md transition-all duration-300 ease-in-out overflow-hidden py-1`}
                   style={{ width: '40px', maxHeight: isToolbarOpen ? '500px' : '40px' }} 
@@ -496,7 +577,6 @@ return (
                   </button>
                 </div>
 
-                {/* กล่องตั้งค่าเสกวัตถุ */}
                 <AnimatePresence>
                   {activeTool === 'add' && (
                     <motion.div
@@ -536,29 +616,35 @@ return (
                     </motion.div>
                   )}
                 </AnimatePresence>
-
               </div>
 
-              {/* Timebar — same level as toolbar */}
-              <div className="absolute top-4 right-4 z-50 pointer-events-auto">
-                <Timebar 
-                  isPlaying={isPlaying}
-                  timeScale={timeScale}
-                  displayTime={displayTime}
-                  onTogglePlay={handleTogglePlay}
-                  onRestart={handleRestart}
-                  onTimeScaleChange={setTimeScale}
-                  onSeek={handleSeek}
-                />
-              </div>
+              
               <InteractiveGrid 
                 initialCamera={activeSim.physicsState?.camera} 
                 onCameraChange={handleCameraChange} 
                 activeTool={activeTool} 
-                onGridClick={(wx, wy, us) => handleGridClick(wx, wy)}
-                onGridPointerDown={(wx, wy, e, us) => handleGridPointerDown(wx, wy, e, us)}
-                onGridPointerMove={(wx, wy, e, us) => handleGridPointerMove(wx, wy, e, us)}
-                onGridPointerUp={(wx, wy, e, us) => handleGridPointerUp(wx, wy, e, us)}
+                onGridClick={handleGridClick}
+                onGridPointerDown={handleGridPointerDown}
+                onGridPointerMove={handleGridPointerMove}
+                onGridPointerUp={handleGridPointerUp}
+                style={{ 
+                   cursor: activeTool === 'cursor' ? 'default' : 
+                          (() => {
+                            const tool = tools.find(t => t.id === activeTool);
+                            if (!tool || !tool.icon) return 'default';
+                            
+                            // Create data URI for SVG cursor
+                            const color = tool.id === 'velocity' ? '%233B82F6' : (tool.id === 'force' ? '%23EF4444' : '%23555555');
+                            const svgString = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${color}' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'>${
+                              typeof tool.icon === 'string' ? '' : // Handle path strings if icon was just path
+                              tool.id === 'add' ? `<circle cx='12' cy='12' r='10'/><path d='M8 12h8'/><path d='M12 8v8'/>` :
+                              tool.id === 'erase' ? `<path d='m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21'/><path d='M22 21H7'/><path d='m5 11 9 9'/>` :
+                              tool.id === 'ruler' ? `<path d='M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z'/><path d='m14.5 12.5 2-2'/><path d='m11.5 9.5 2-2'/><path d='m8.5 6.5 2-2'/><path d='m17.5 15.5 2-2'/>` :
+                              tool.id === 'velocity' || tool.id === 'force' ? `<path d='M7 7h10v10'/><path d='M7 17 17 7'/>` : ''
+                            }</svg>`;
+                            return `url("data:image/svg+xml;utf8,${svgString}") 12 12, auto`;
+                          })()
+                }}
               >
                 {({ size, offset, zoom, unitStep }) => (
                   <>
@@ -576,7 +662,6 @@ return (
                       setIsPlaying={setIsPlaying}
                     />
 
-                    {/* Vector Editor Overlay */}
                     <AnimatePresence>
                       {vectorEditor && (
                         <motion.div 
@@ -603,11 +688,7 @@ return (
                                 onChange={(e) => {
                                   const val = Number(e.target.value) || 0;
                                   setVectorEditor(prev => ({ ...prev, magnitude: val }));
-                                  if (vectorEditor.type === 'velocity') {
-                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { velocity: val });
-                                  } else {
-                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { force: val });
-                                  }
+                                  updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { magnitude: val });
                                 }}
                               />
                               <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
@@ -617,8 +698,7 @@ return (
                                     setVectorEditor(prev => {
                                       if (!prev) return null;
                                       const val = Number(prev.magnitude) + 1;
-                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { velocity: val });
-                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { force: val });
+                                      updateVectorValue(prev.objId, prev.type, prev.index, { magnitude: val });
                                       return { ...prev, magnitude: val };
                                     });
                                   }} 
@@ -632,8 +712,7 @@ return (
                                     setVectorEditor(prev => {
                                       if (!prev) return null;
                                       const val = Math.max(0, Number(prev.magnitude) - 1);
-                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { velocity: val });
-                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { force: val });
+                                      updateVectorValue(prev.objId, prev.type, prev.index, { magnitude: val });
                                       return { ...prev, magnitude: val };
                                     });
                                   }} 
@@ -652,11 +731,7 @@ return (
                                 onChange={(e) => {
                                   let val = Number(e.target.value) || 0;
                                   setVectorEditor(prev => ({ ...prev, angle: val }));
-                                  if (vectorEditor.type === 'velocity') {
-                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { angle: val });
-                                  } else {
-                                    controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { forceAngle: val });
-                                  }
+                                  updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { angle: val });
                                 }}
                               />
                               <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
@@ -666,8 +741,7 @@ return (
                                     setVectorEditor(prev => {
                                       if (!prev) return null;
                                       const val = Number(prev.angle) + 1;
-                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { angle: val });
-                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { forceAngle: val });
+                                      updateVectorValue(prev.objId, prev.type, prev.index, { angle: val });
                                       return { ...prev, angle: val };
                                     });
                                   }} 
@@ -681,8 +755,7 @@ return (
                                     setVectorEditor(prev => {
                                       if (!prev) return null;
                                       const val = Number(prev.angle) - 1;
-                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { angle: val });
-                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { forceAngle: val });
+                                      updateVectorValue(prev.objId, prev.type, prev.index, { angle: val });
                                       return { ...prev, angle: val };
                                     });
                                   }} 
@@ -707,12 +780,100 @@ return (
                 )}
               </InteractiveGrid>
 
+              {/* 🌟 OLD UI (Timebar) - Inside canvas frame (Top-Right) */}
+              <div className="absolute top-4 right-4 z-40 pointer-events-auto">
+                <Timebar 
+                  isPlaying={isPlaying}
+                  timeScale={timeScale}
+                  displayTime={displayTime}
+                  onTogglePlay={handleTogglePlay}
+                  onRestart={handleRestart}
+                  onTimeScaleChange={setTimeScale}
+                  onSeek={handleSeek}
+                />
+              </div>
+
+              {/* 🌟 NEW minimal & Collapsible Timeline Player - Inside canvas frame (Bottom-Right) */}
+              <div 
+                className="absolute bottom-4 right-4 z-40 flex justify-end pointer-events-none"
+                style={{ width: isTimelineCollapsed ? '48px' : 'calc(100% - 32px)', maxWidth: '400px' }}
+              >
+                <motion.div 
+                  layout
+                  initial={false}
+                  animate={{ 
+                    width: isTimelineCollapsed ? '48px' : '100%',
+                    height: isTimelineCollapsed ? '48px' : 'auto',
+                  }}
+                  className="bg-white/90 dark:bg-[#313338]/90 backdrop-blur-md rounded-[20px] shadow-2xl border border-theme-border pointer-events-auto flex flex-col overflow-hidden relative"
+                >
+                  {isTimelineCollapsed ? (
+                    <button 
+                      onClick={() => setIsTimelineCollapsed(false)}
+                      className="w-full h-full flex items-center justify-center text-[#FFB65A] hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <ChevronLeftIcon />
+                    </button>
+                  ) : (
+                    <div className="p-3 flex items-center gap-4">
+                      <button 
+                        onClick={handleTogglePlay}
+                        className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-[#FFB65A] hover:bg-[#ffa733] text-white shadow-sm transition-all active:scale-95"
+                      >
+                        {isPlaying ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 3 14 9-14 9V3z"/></svg>
+                        )}
+                      </button>
+
+                      <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                        <div className="flex justify-between items-end mb-0.5">
+                          <span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider">Simulation</span>
+                          <span className="text-[12px] font-bold text-theme-primary font-['Chakra_Petch']">{displayTime.toFixed(2)}s <span className="text-theme-muted opacity-40 font-normal">/ {maxTime.toFixed(2)}s</span></span>
+                        </div>
+                        <div className="relative group h-4 flex items-center">
+                          <div className="absolute inset-0 h-1 top-1/2 -translate-y-1/2 bg-gray-200 dark:bg-gray-700/50 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-red-400 dark:bg-red-500 transition-none"
+                              style={{ width: `${maxTime > 0 ? (displayTime / maxTime) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <input 
+                            type="range"
+                            min="0"
+                            max={maxTime || 0.1}
+                            step="0.01"
+                            value={displayTime}
+                            onChange={(e) => handleSeek(parseFloat(e.target.value))}
+                            className="absolute inset-0 w-full opacity-0 cursor-pointer z-10"
+                          />
+                          <div 
+                            className="absolute w-3 h-3 bg-white dark:bg-[#1E1F22] border-2 border-red-500 rounded-full shadow-sm top-1/2 -translate-y-1/2 pointer-events-none group-hover:scale-125 transition-transform"
+                            style={{ left: `calc(${maxTime > 0 ? (displayTime / maxTime) * 100 : 0}% - 6px)` }}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1 border-l border-theme-border pl-2 ml-1">
+                        <button 
+                          onClick={() => setIsTimelineCollapsed(true)} 
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-theme-secondary rounded-lg transition-colors"
+                          title="พับเก็บ"
+                        >
+                          <ChevronRightIcon />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              </div>
             </div>
           </div>
         </motion.div>
       )}
 
-      {/* 🌟 Modal ยืนยันการลบทั้งหมด */}
+
       <AnimatePresence>
         {isClearModalOpen && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -749,7 +910,6 @@ return (
           </div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
