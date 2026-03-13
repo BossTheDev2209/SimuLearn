@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ControlPanel from '../ControlPanel/ControlPanel';
-import InteractiveGrid from './InteractiveGrid';
+import InteractiveGrid from './InteractiveGrid/index';
 import MatterCanvas from './MatterCanvas/index';
 import Timebar, { ArrowUpIcon, ArrowDownIcon, RestartIcon, ChevronLeftIcon, ChevronRightIcon } from './Timebar';
 
