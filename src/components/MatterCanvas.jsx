@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, memo } from 'react';
 import Matter from 'matter-js';
 
 const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, timeStateRef, setIsPlaying }, ref) => {
@@ -478,4 +478,4 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
   return <canvas ref={canvasRef} width={size.w} height={size.h} className="absolute inset-0 pointer-events-none z-10" />;
 });
 
-export default MatterCanvas;
+export default memo(MatterCanvas);

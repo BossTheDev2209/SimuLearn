@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle, memo } from 'react';
 import ObjectAppearancePicker, { PRESET_COLORS } from './ObjectAppearancePicker';
 
 const SIMULATION_PRESETS = {
@@ -35,8 +35,8 @@ function createNewObject(index, presetProps) {
   };
 }
 
-// Slider Row 
-function SliderRow({ label, unit, value, min, max, step, onChange, disabled }) {
+// 🌟 ห่อด้วย memo
+const SliderRow = memo(({ label, unit, value, min, max, step, onChange, disabled }) => {
   return (
     <div className={`mb-3 transition-opacity ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <div className="flex items-baseline justify-between mb-1">
@@ -57,10 +57,10 @@ function SliderRow({ label, unit, value, min, max, step, onChange, disabled }) {
       />
     </div>
   );
-}
+});
 
-// Toggle Row 
-function ToggleRow({ label, checked, onChange, disabled }) {
+// 🌟 ห่อด้วย memo
+const ToggleRow = memo(({ label, checked, onChange, disabled }) => {
   return (
     <label className={`flex items-center justify-between py-2 transition-opacity ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer group'}`}>
       <span className="text-[13px] font-medium text-theme-primary">{label}</span>
@@ -82,18 +82,15 @@ function ToggleRow({ label, checked, onChange, disabled }) {
       </div>
     </label>
   );
-}
+});
 
-// Main ControlPanel 
 const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'default', onUpdate, initialState, isLocked }, ref) {
   const presetProps = SIMULATION_PRESETS[simulationType] || SIMULATION_PRESETS.default;
 
-  // Load previously-spawned objects from saved state (isSpawned: true only).
-  // Template preset objects (no isSpawned flag) are ignored to avoid stale placeholder circles.
   const savedObjects = (initialState?.objects || []).filter(o => o.isSpawned);
   const [objects, setObjects] = useState(savedObjects);
   const [objectCounter, setObjectCounter] = useState(savedObjects.length);
-  const objectCounterRef = useRef(savedObjects.length); // Stable ref — no stale closure in imperative handle
+  const objectCounterRef = useRef(savedObjects.length);
   const [activePickerId, setActivePickerId] = useState(null);
   const anchorRefs = useRef({});
 
@@ -106,10 +103,8 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
   const [showResultantVector, setShowResultantVector] = useState(initialState?.showResultantVector !== undefined ? initialState.showResultantVector : true);
   const [groundFriction, setGroundFriction] = useState(initialState?.groundFriction !== undefined ? initialState.groundFriction : 0);
 
-  // Keep objectCounterRef in sync
   useEffect(() => { objectCounterRef.current = objectCounter; }, [objectCounter]);
 
-  // Expose addObject + clearAll for canvas/toolbar-side control
   useImperativeHandle(ref, () => ({
     addObject: (objData) => {
       const counter = objectCounterRef.current;
@@ -135,14 +130,17 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
     },
   }));
 
-  // ControlPanel owns its state exclusively. Remount via key prop to reset.
-
+  // 🌟 Throttled update to avoid spamming Workspace renders
+  const lastUpdateRef = useRef(null);
   useEffect(() => {
     if (onUpdate) {
-      onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction });
+      const stateStr = JSON.stringify({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction });
+      if (lastUpdateRef.current !== stateStr) {
+        lastUpdateRef.current = stateStr;
+        onUpdate(JSON.parse(stateStr));
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction]);
+  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction, onUpdate]);
 
   const [pickPending, setPickPending] = useState(false);
   const [pendingColor, setPendingColor] = useState('#22C55E');
@@ -205,7 +203,7 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
   }, []);
 
   return (
-    <div className="control-panel w-full h-full flex flex-col bg-theme-panel overflow-hidden relative">
+    <div className="control-panel w-full h-full flex flex-col bg-theme-panel overflow-hidden relative rounded-2xl">
       
       {/* Banner when locked (simulation is running) */}
       {isLocked && (
@@ -381,8 +379,6 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
                 )}
               </div>
             ))}
-
-
           </div>
         )}
 
@@ -427,4 +423,4 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
   );
 });
 
-export default ControlPanel;
+export default memo(ControlPanel);

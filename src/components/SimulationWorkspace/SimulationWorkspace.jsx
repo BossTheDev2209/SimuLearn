@@ -1,12 +1,16 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ControlPanel from '../ControlPanel';
-import InteractiveGrid from './InteractiveGrid';
-import MatterCanvas from './MatterCanvas';
-import Timebar, { ArrowUpIcon, ArrowDownIcon, RestartIcon, ChevronLeftIcon, ChevronRightIcon } from './Timebar';
+import InteractiveGrid from '../InteractiveGrid';
+import MatterCanvas from '../MatterCanvas';
+import Timebar, { ArrowUpIcon, ArrowDownIcon, RestartIcon, ChevronLeftIcon, ChevronRightIcon } from '../Timebar';
 
-// 🌟 Component แยกที่นำกลับมาใช้ซ้ำได้
-const HoldableButton = ({ onAction, className, children, title, tabIndex }) => {
+// 🌟 Import Hooks ที่แยกการทำงานออกมา
+import { useSimulationHistory } from './hooks/useSimulationHistory';
+import { useTimeManagement } from './hooks/useTimeManagement';
+
+// 🌟 ห่อด้วย memo
+const HoldableButton = memo(({ onAction, className, children, title, tabIndex }) => {
   const timerRef = useRef(null);
   
   const start = useCallback(() => {
@@ -36,9 +40,10 @@ const HoldableButton = ({ onAction, className, children, title, tabIndex }) => {
       {children}
     </button>
   );
-};
+});
 
-const SharedSlider = ({ label, value, min, max, step, onChange }) => (
+// 🌟 ห่อด้วย memo
+const SharedSlider = memo(({ label, value, min, max, step, onChange }) => (
   <div className="flex items-center gap-2 px-1">
     {label && <span className="text-xs font-semibold text-theme-muted">{label}</span>}
     <input 
@@ -50,11 +55,12 @@ const SharedSlider = ({ label, value, min, max, step, onChange }) => (
       title={`ปัจจุบัน: ${value}`}
     />
   </div>
-);
+));
 
-const ClockIcon = () => (
+// 🌟 ห่อด้วย memo
+const ClockIcon = memo(() => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-);
+));
 
 export default function SimulationWorkspace({ activeSim, isInteracting, onSaveControlState, onSavePhysicsState }) {
   const shouldHideLogo = isInteracting || activeSim !== null;
@@ -62,60 +68,40 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const [vectorEditor, setVectorEditor] = useState(null);
   const [isTimelineCollapsed, setIsTimelineCollapsed] = useState(false);
 
-  // --- Timebar integration states ---
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [hasStartedOnce, setHasStartedOnce] = useState(false); 
-  const [timeScale, setTimeScale] = useState(1);
-  const [displayTime, setDisplayTime] = useState(0);
-  const [maxTime, setMaxTime] = useState(0); 
-  const snapshotRef = useRef(null); 
-
-  // --- Undo / Redo ---
-  const historyRef = useRef([]);
-  const redoStackRef = useRef([]);
-
-  const pushToHistory = useCallback((state) => {
-    if (!state) return;
-    historyRef.current.push(JSON.parse(JSON.stringify(state)));
-    if (historyRef.current.length > 50) historyRef.current.shift();
-    redoStackRef.current = []; 
-  }, []);
-
-  const undo = useCallback(() => {
-    if (historyRef.current.length === 0) return;
-    const previous = historyRef.current.pop();
-    redoStackRef.current.push(JSON.parse(JSON.stringify(simState)));
-    setSimState(previous);
-    if (onSaveControlState) onSaveControlState(previous);
-  }, [simState, onSaveControlState]);
-
-  const redo = useCallback(() => {
-    if (redoStackRef.current.length === 0) return;
-    const next = redoStackRef.current.pop();
-    historyRef.current.push(JSON.parse(JSON.stringify(simState)));
-    setSimState(next);
-    if (onSaveControlState) onSaveControlState(next);
-  }, [simState, onSaveControlState]);
-
-  const undoRef = useRef(undo);
-  const redoRef = useRef(redo);
-  useEffect(() => { undoRef.current = undo; redoRef.current = redo; }, [undo, redo]);
-
   // --- State สำหรับ ถังขยะ และ Tooltip (Toast) ---
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
-  const [spawnToast, setSpawnToast] = useState(null); // เก็บข้อความแจ้งเตือนเสกไม่ได้
+  const [spawnToast, setSpawnToast] = useState(null);
+  const [isToolbarOpen, setIsToolbarOpen] = useState(true);
+  const [activeTool, setActiveTool] = useState('cursor');
 
-  // Use a ref for continuous time updates without causing top-level re-renders
-  const timeStateRef = useRef({ time: 0, isPlaying: false, timeScale: 1, targetTime: null });
+  const [spawnConfig, setSpawnConfig] = useState({
+    shape: 'circle',
+    size: 1,
+    color: '#FFB65A',
+    mass: 10,
+    restitution: 0
+  });
 
-  // Update ref from state
+  const cameraRef = useRef(activeSim?.physicsState?.camera || { zoom: 1, offset: {x:0, y:0} });
+  const bodiesRef = useRef(activeSim?.physicsState?.bodies || {});
+  const matterCanvasRef = useRef(null);
+  const controlPanelRef = useRef(null);
+  const [restartToken, setRestartToken] = useState(0);
+
+  // 🌟 ใช้ Custom Hooks (แทนที่ State จัดการเวลาและประวัติทั้งหมด)
+  const { pushToHistory, undoRef, redoRef } = useSimulationHistory(simState, setSimState, onSaveControlState);
+  
+  const { 
+    isPlaying, setIsPlaying, hasStartedOnce, timeScale, setTimeScale, 
+    displayTime, maxTime, timeStateRef, handleTogglePlay, handleRestart, handleSeek 
+  } = useTimeManagement(simState, setSimState, onSaveControlState, matterCanvasRef);
+
+  // เคลียร์ Vector Editor เมื่อกำลังเล่น
   useEffect(() => { 
-    timeStateRef.current.isPlaying = isPlaying; 
     if (isPlaying) setVectorEditor(null);
   }, [isPlaying]);
-  useEffect(() => { timeStateRef.current.timeScale = timeScale; }, [timeScale]);
   
-  // Sync simState back to App whenever it changes (Throttled if needed, but App uses a timeout anyway)
+  // Sync simState back to App
   useEffect(() => {
     if (simState && onSaveControlState) {
       onSaveControlState(simState);
@@ -142,10 +128,8 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     });
   }, []);
 
-  // Spacebar = Play / Pause, R = Restart
-  const hasStartedOnceRef = useRef(hasStartedOnce);
-  useEffect(() => { hasStartedOnceRef.current = hasStartedOnce; }, [hasStartedOnce]);
-  const handleRestartRef = useRef(null);
+  const handleRestartRef = useRef(handleRestart);
+  useEffect(() => { handleRestartRef.current = handleRestart; }, [handleRestart]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -154,10 +138,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
 
       if (e.code === 'Space') {
         e.preventDefault();
-        const nextState = !timeStateRef.current.isPlaying;
-        timeStateRef.current.isPlaying = nextState;
-        setIsPlaying(nextState);
-        if (!hasStartedOnceRef.current) setHasStartedOnce(true);
+        handleTogglePlay();
       }
 
       if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
@@ -177,24 +158,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const [isToolbarOpen, setIsToolbarOpen] = useState(true);
-  const [activeTool, setActiveTool] = useState('cursor');
-
-  const [spawnConfig, setSpawnConfig] = useState({
-    shape: 'circle',
-    size: 1,
-    color: '#FFB65A',
-    mass: 10,
-    restitution: 0
-  });
-
-  const cameraRef = useRef(activeSim?.physicsState?.camera || { zoom: 1, offset: {x:0, y:0} });
-  const bodiesRef = useRef(activeSim?.physicsState?.bodies || {});
-  const matterCanvasRef = useRef(null);
-  const controlPanelRef = useRef(null);
-  const [restartToken, setRestartToken] = useState(0);
+  }, [handleTogglePlay, undoRef, redoRef]);
 
   const handleControlUpdate = useCallback((state) => {
     setSimState(prev => {
@@ -202,69 +166,6 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       return state;
     });
   }, []);
-
-  useEffect(() => {
-    let animationFrameId;
-    const updateTimeDisplay = () => {
-      const curTime = timeStateRef.current.time;
-      setDisplayTime(curTime);
-      animationFrameId = requestAnimationFrame(updateTimeDisplay);
-    };
-    animationFrameId = requestAnimationFrame(updateTimeDisplay);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []);
-
-  // 🌟 Auto-predict simulation end time when simState changes
-  useEffect(() => {
-    if (!matterCanvasRef.current || isPlaying) return;
-    const timer = setTimeout(() => {
-       const predicted = matterCanvasRef.current.predictSimulationTime?.();
-       if (predicted !== undefined) setMaxTime(predicted);
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [simState, isPlaying]);
-
-  const handleTogglePlay = () => {
-    if (!hasStartedOnce) setHasStartedOnce(true);
-    const next = !timeStateRef.current.isPlaying;
-    
-    if (next && !timeStateRef.current.isPlaying) {
-      snapshotRef.current = {
-        simState: JSON.parse(JSON.stringify(simState))
-      };
-    }
-    
-    timeStateRef.current.isPlaying = next; 
-    setIsPlaying(next); 
-  };
-
-  const handleRestart = () => {
-    timeStateRef.current.time = 0;
-    timeStateRef.current.targetTime = null;
-    timeStateRef.current.isPlaying = false;
-    setIsPlaying(false);
-    setDisplayTime(0);
-
-    if (snapshotRef.current) {
-      const restored = snapshotRef.current.simState;
-      setSimState(restored);
-      if (onSaveControlState) onSaveControlState(restored);
-    }
-
-    if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
-  };
-  handleRestartRef.current = handleRestart;
-
-  const handleSeek = (val) => {
-    timeStateRef.current.isPlaying = false;
-    setIsPlaying(false);
-    timeStateRef.current.time = val;
-    setDisplayTime(val);
-
-    if (matterCanvasRef.current) {
-      matterCanvasRef.current.resetSimulation({ targetTime: val, instant: true });
-    }
-  };
 
   const handleCameraChange = useCallback((camera) => {
     cameraRef.current = camera;
@@ -401,7 +302,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
          });
       }
     }
-  }, [activeTool, spawnConfig, simState, onSaveControlState]);
+  }, [activeTool, spawnConfig, simState, pushToHistory]);
 
   const handleGridPointerDown = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
@@ -467,13 +368,13 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
           });
 
           setVectorEditor({ 
-             objId: v.objId, 
-             type: v.type, 
-             index: vIdx,
-             magnitude, 
-             angle, 
-             screenX: e.clientX, 
-             screenY: e.clientY 
+              objId: v.objId, 
+              type: v.type, 
+              index: vIdx,
+              magnitude, 
+              angle, 
+              screenX: e.clientX, 
+              screenY: e.clientY 
           });
         }
       } else {
@@ -482,7 +383,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     } else if (activeTool === 'cursor') {
       setVectorEditor(null);
     }
-  }, [activeTool, simState]);
+  }, [activeTool, simState, pushToHistory]);
 
   const tools = [
     { id: 'cursor', title: 'เลือก / เลื่อนจอ (V)', icon: <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/> },
@@ -629,21 +530,21 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
                 onGridPointerUp={handleGridPointerUp}
                 style={{ 
                    cursor: activeTool === 'cursor' ? 'default' : 
-                          (() => {
-                            const tool = tools.find(t => t.id === activeTool);
-                            if (!tool || !tool.icon) return 'default';
-                            
-                            // Create data URI for SVG cursor
-                            const color = tool.id === 'velocity' ? '%233B82F6' : (tool.id === 'force' ? '%23EF4444' : '%23555555');
-                            const svgString = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${color}' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'>${
-                              typeof tool.icon === 'string' ? '' : // Handle path strings if icon was just path
-                              tool.id === 'add' ? `<circle cx='12' cy='12' r='10'/><path d='M8 12h8'/><path d='M12 8v8'/>` :
-                              tool.id === 'erase' ? `<path d='m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21'/><path d='M22 21H7'/><path d='m5 11 9 9'/>` :
-                              tool.id === 'ruler' ? `<path d='M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z'/><path d='m14.5 12.5 2-2'/><path d='m11.5 9.5 2-2'/><path d='m8.5 6.5 2-2'/><path d='m17.5 15.5 2-2'/>` :
-                              tool.id === 'velocity' || tool.id === 'force' ? `<path d='M7 7h10v10'/><path d='M7 17 17 7'/>` : ''
-                            }</svg>`;
-                            return `url("data:image/svg+xml;utf8,${svgString}") 12 12, auto`;
-                          })()
+                         (() => {
+                           const tool = tools.find(t => t.id === activeTool);
+                           if (!tool || !tool.icon) return 'default';
+                           
+                           // Create data URI for SVG cursor
+                           const color = tool.id === 'velocity' ? '%233B82F6' : (tool.id === 'force' ? '%23EF4444' : '%23555555');
+                           const svgString = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${color}' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'>${
+                             typeof tool.icon === 'string' ? '' : // Handle path strings if icon was just path
+                             tool.id === 'add' ? `<circle cx='12' cy='12' r='10'/><path d='M8 12h8'/><path d='M12 8v8'/>` :
+                             tool.id === 'erase' ? `<path d='m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21'/><path d='M22 21H7'/><path d='m5 11 9 9'/>` :
+                             tool.id === 'ruler' ? `<path d='M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z'/><path d='m14.5 12.5 2-2'/><path d='m11.5 9.5 2-2'/><path d='m8.5 6.5 2-2'/><path d='m17.5 15.5 2-2'/>` :
+                             tool.id === 'velocity' || tool.id === 'force' ? `<path d='M7 7h10v10'/><path d='M7 17 17 7'/>` : ''
+                           }</svg>`;
+                           return `url("data:image/svg+xml;utf8,${svgString}") 12 12, auto`;
+                         })()
                 }}
               >
                 {({ size, offset, zoom, unitStep }) => (
