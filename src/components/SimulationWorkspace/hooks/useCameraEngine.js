@@ -17,8 +17,10 @@ export const useCameraEngine = (activeSim, followedObjectId, onSavePhysicsState,
       x: -(wx * PIXELS_PER_METER * cameraRef.current.zoom),
       y: (wy * PIXELS_PER_METER * cameraRef.current.zoom)
     };
-    handleCameraChange({ ...cameraRef.current, offset: newOffset });
-  }, [handleCameraChange]);
+    const newCamera = { ...cameraRef.current, offset: newOffset };
+    handleCameraChange(newCamera);
+    gridRef.current?.setCamera(newCamera); // Sync InteractiveGrid
+  }, [handleCameraChange, gridRef]);
 
   const handlePhysicsChange = useCallback((bodies, isMoving) => {
     bodiesRef.current = bodies;
@@ -27,10 +29,25 @@ export const useCameraEngine = (activeSim, followedObjectId, onSavePhysicsState,
       const body = bodies[followedObjectId];
       if (body) {
         const zoom = cameraRef.current.zoom;
-        const newOffset = {
-          x: -(body.position.x * PIXELS_PER_METER * zoom),
-          y: (body.position.y * PIXELS_PER_METER * zoom)
-        };
+        const targetX = -(body.position.x * PIXELS_PER_METER * zoom);
+        const targetY = (body.position.y * PIXELS_PER_METER * zoom);
+
+        const currentX = cameraRef.current.offset.x;
+        const currentY = cameraRef.current.offset.y;
+
+        const lerpFactor = 0.15;
+        const distSq = (targetX - currentX) ** 2 + (targetY - currentY) ** 2;
+
+        let newOffset;
+        if (distSq < 1.0) {
+          newOffset = { x: targetX, y: targetY };
+        } else {
+          newOffset = {
+            x: currentX + (targetX - currentX) * lerpFactor,
+            y: currentY + (targetY - currentY) * lerpFactor
+          };
+        }
+
         cameraRef.current = { ...cameraRef.current, offset: newOffset };
         gridRef.current?.setCamera({ ...cameraRef.current });
       }

@@ -25,10 +25,10 @@ const HoldableButton = memo(({ onAction, className, children, title, tabIndex })
   return (
     <button 
       tabIndex={tabIndex}
-      onPointerDown={(e) => { e.stopPropagation(); start(); }}
-      onPointerUp={(e) => { e.stopPropagation(); stop(); }}
-      onPointerLeave={(e) => { e.stopPropagation(); stop(); }}
-      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); start(); }}
+      onPointerUp={(e) => { e.stopPropagation(); e.preventDefault(); stop(); }}
+      onPointerLeave={(e) => { e.stopPropagation(); e.preventDefault(); stop(); }}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
       className={className}
       title={title}
     >
@@ -48,8 +48,8 @@ export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue
         exit={{ opacity: 0, scale: 0.8 }} 
         className="fixed z-[300] bg-white dark:bg-[#2B2D31] rounded-[10px] shadow-lg border border-theme-border p-2 flex flex-col gap-2" 
         style={{ left: vectorEditor.screenX + 15, top: vectorEditor.screenY + 15 }}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
       >
         <span className="text-xs font-bold text-theme-secondary flex items-center gap-1">
           {vectorEditor.type === 'velocity' ? 'เวกเตอร์ความเร็ว (v)' : 'เวกเตอร์แรง (F)'}
@@ -133,9 +133,9 @@ export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue
           </div>
         </div>
         <button 
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); setVectorEditor(null); }} 
-          onKeyDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); setVectorEditor(null); }} 
+          onKeyDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           className="bg-theme-primary text-white text-xs font-bold py-1.5 rounded-md mt-1"
         >
           ตกลง

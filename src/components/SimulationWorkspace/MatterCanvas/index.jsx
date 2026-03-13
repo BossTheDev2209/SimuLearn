@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, memo } from 'react';
 import Matter from 'matter-js';
 import { PIXELS_PER_METER, renderObjectVectors, drawArrow } from './VectorRenderer';
-import { createPhysicsEngine, createGround, updatePhysics, predictSimulationTime } from './PhysicsEngine';
+import { createPhysicsEngine, createGround, updatePhysics, predictSimulationTime, worldToMatter, matterToWorld, computeGravityY } from './PhysicsEngine';
 
 const MatterCanvas = forwardRef(({ 
   size, offset, zoom, unitStep, simState, onPhysicsChange, 
@@ -52,15 +52,15 @@ const MatterCanvas = forwardRef(({
         const vels = [...(obj.values?.velocities || [])];
         if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0, isLegacy: true });
 
-        for (let i = 0; i < vels.length; i++) {
+      for (let i = 0; i < vels.length; i++) {
           const v = vels[i];
-          const vx = v.magnitude * Math.cos((v.angle * Math.PI) / 180) * 0.2;
-          const vy = v.magnitude * Math.sin((v.angle * Math.PI) / 180) * 0.2;
+          const vx = v.magnitude * Math.cos((v.angle * Math.PI) / 180) * 0.2 * 100;
+          const vy = v.magnitude * Math.sin((v.angle * Math.PI) / 180) * 0.2 * 100;
           
           // Check proximity to arrow head (approximate)
           const headX = bx + vx, headY = by + vy;
           const dist = Math.sqrt((wx - headX) ** 2 + (wy - headY) ** 2);
-          if (dist < HIT_RADIUS) {
+          if (dist < 40) { // 40px HIT RADIUS
             return { objId: obj.id, type: 'velocity', index: v.isLegacy ? null : i, isLegacy: !!v.isLegacy };
           }
         }
@@ -71,12 +71,12 @@ const MatterCanvas = forwardRef(({
 
         for (let i = 0; i < forces.length; i++) {
           const f = forces[i];
-          const fx = f.magnitude * Math.cos((f.angle * Math.PI) / 180) * 0.2;
-          const fy = f.magnitude * Math.sin((f.angle * Math.PI) / 180) * 0.2;
+          const fx = f.magnitude * Math.cos((f.angle * Math.PI) / 180) * 0.2 * 100;
+          const fy = f.magnitude * Math.sin((f.angle * Math.PI) / 180) * 0.2 * 100;
           
           const headX = bx + fx, headY = by + fy;
           const dist = Math.sqrt((wx - headX) ** 2 + (wy - headY) ** 2);
-          if (dist < HIT_RADIUS) {
+          if (dist < 40) {
             return { objId: obj.id, type: 'force', index: f.isLegacy ? null : i, isLegacy: !!f.isLegacy };
           }
         }
@@ -149,18 +149,26 @@ const MatterCanvas = forwardRef(({
     let raf;
     let lastTime = performance.now();
     let accumulator = 0;
-    const TIME_STEP_MS = 1000 / 120;
-    const DT = 1 / 120;
+    const FIXED_DELTA_MS = 1000 / 60; // 60 ticks per second exactly
 
     const loop = (now) => {
+      // Clamp delta to prevent spiral of death on lag spikes
       const delta = Math.min(now - lastTime, 100);
       lastTime = now;
 
       if (timeStateRef.current?.isPlaying) {
         accumulator += delta * (timeStateRef.current.timeScale || 1);
-        while (accumulator >= TIME_STEP_MS) {
-          updatePhysics(engine, DT, loopPropsRef.current.simState, bodyMap.current, loopPropsRef.current.maxTime, timeStateRef.current, setIsPlaying);
-          accumulator -= TIME_STEP_MS;
+        while (accumulator >= FIXED_DELTA_MS) {
+          updatePhysics(engine, FIXED_DELTA_MS, loopPropsRef.current.simState, bodyMap.current, loopPropsRef.current.maxTime, timeStateRef.current, setIsPlaying);
+          
+          // 🚀 Sync Timeline clock strictly to physics ticks
+          if (timeStateRef.current) {
+            timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
+            // Update time = ticks * (16.66 / 1000)
+            timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
+          }
+          
+          accumulator -= FIXED_DELTA_MS;
         }
       }
 
@@ -173,17 +181,29 @@ const MatterCanvas = forwardRef(({
         
         const pxPerUnit = PIXELS_PER_METER * zoom;
         const ox = size.w/2 + offset.x, oy = size.h/2 + offset.y;
-        const toScreen = (wx, wy) => ({ x: ox + wx * pxPerUnit, y: oy - wy * pxPerUnit });
+        // World coordinates are METERS (Y-up)
+        // Screen coordinates: World X -> Screen, World Y -> Screen
+        const toScreen = (wx, wy) => ({ 
+          x: ox + wx * PPM_ZOOMED, 
+          y: oy - wy * PPM_ZOOMED 
+        });
+        const PPM_ZOOMED = PIXELS_PER_METER * zoom;
 
         // Draw Bodies
         Matter.Composite.allBodies(engine.world).forEach(body => {
           if (body.label === 'ground') return;
           ctx.beginPath();
+          const worldPos = matterToWorld(body.position.x, body.position.y);
+          const radiusM = (body.circleRadius ?? (body.plugin?.size / 2)) / PIXELS_PER_METER;
+
           if (body.label === 'circle') {
-             const c = toScreen(body.position.x, body.position.y); ctx.arc(c.x, c.y, body.circleRadius * pxPerUnit, 0, 2*Math.PI);
+             const c = toScreen(worldPos.x, worldPos.y); 
+             ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED, 0, 2*Math.PI);
           } else {
-             const first = toScreen(body.vertices[0].x, body.vertices[0].y); ctx.moveTo(first.x, first.y);
-             for(let i=1; i<body.vertices.length; i++) { const p = toScreen(body.vertices[i].x, body.vertices[i].y); ctx.lineTo(p.x, p.y); }
+             // Convert vertices from Matter (px) to World (m)
+             const verts = body.vertices.map(v => matterToWorld(v.x, v.y));
+             const first = toScreen(verts[0].x, verts[0].y); ctx.moveTo(first.x, first.y);
+             for(let i=1; i<verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); }
           }
           ctx.closePath();
           ctx.fillStyle = (body.render?.fillStyle || '#999999') + 'CC'; ctx.fill();
@@ -248,7 +268,11 @@ const MatterCanvas = forwardRef(({
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !simState) return;
-    engine.gravity.y = -(simState.gravity / 1000);
+    
+    // 🌍 Standardized Gravity (Physics Accuracy Overhaul)
+    engine.world.gravity.scale = 1; 
+    engine.world.gravity.y = computeGravityY(simState.gravity || 9.8);
+    engine.world.gravity.x = 0;
     
     // Body lifecycle logic (add/remove)
     const activeIds = new Set(simState.objects?.filter(o => o.isSpawned).map(o => o.id) || []);
@@ -258,18 +282,39 @@ const MatterCanvas = forwardRef(({
       if (!obj.isSpawned) return;
       let body = bodyMap.current.get(obj.id);
       if (!body) {
-        const opts = { restitution: obj.values?.restitution || 0, friction: 0.5, frictionStatic: 0.8 };
-        if (obj.shape === 'circle') body = Matter.Bodies.circle(obj.position?.x || 0, obj.position?.y || 10, obj.size || 1, opts);
-        else if (obj.shape === 'polygon-3') body = Matter.Bodies.polygon(obj.position?.x || 0, obj.position?.y || 10, 3, (obj.size || 1) / Math.sqrt(3), opts);
-        else body = Matter.Bodies.rectangle(obj.position?.x || 0, obj.position?.y || 10, obj.size || 1, obj.size || 1, opts);
+        // Enforce Vacuum Kinematic defaults here too
+        const opts = { restitution: obj.values?.restitution || 0, friction: 0.0, frictionAir: 0.0, frictionStatic: 0.0 };
+        const { x: px, y: py } = worldToMatter(obj.position?.x || 0, obj.position?.y || 10);
+        const pSize = (obj.size || 1) * PIXELS_PER_METER;
+
+        if (obj.shape === 'circle') body = Matter.Bodies.circle(px, py, pSize / 2, opts);
+        else if (obj.shape === 'polygon-3') body = Matter.Bodies.polygon(px, py, 3, (pSize / 2) / (Math.sqrt(3)/2), opts); // radius of circumcircle
+        else body = Matter.Bodies.rectangle(px, py, pSize, pSize, opts);
         
-        body.label = obj.shape; body.plugin = { size: obj.size || 1 };
+        body.label = obj.shape; body.plugin = { size: pSize };
         Matter.Composite.add(engine.world, body);
         bodyMap.current.set(obj.id, body);
       }
       body.render.fillStyle = obj.color;
       if (obj.values && !timeStateRef.current?.isPlaying) {
-        if (obj.values.height !== undefined) Matter.Body.setPosition(body, { x: body.position.x, y: obj.values.height });
+        if (obj.values.height !== undefined) {
+          const { y: py } = worldToMatter(0, obj.values.height);
+          Matter.Body.setPosition(body, { x: body.position.x, y: py });
+        }
+        
+        // 🚀 Sync Velocity (m/s -> pixels/ms)
+        const vels = [...(obj.values?.velocities || [])];
+        if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
+        
+        let vxSum = 0, vySum = 0;
+        const dtS = 1/60; // assumed
+        vels.forEach(v => {
+          // v_matter = v_world * PPM / 1000
+          vxSum += (v.magnitude * PIXELS_PER_METER / 1000) * Math.cos((v.angle * Math.PI) / 180);
+          vySum += (v.magnitude * PIXELS_PER_METER / 1000) * Math.sin((v.angle * Math.PI) / 180);
+        });
+        // UI Y-up (+) -> Matter Y-down (-)
+        Matter.Body.setVelocity(body, { x: vxSum, y: -vySum }); 
       }
     });
   }, [simState, simSyncToken]);

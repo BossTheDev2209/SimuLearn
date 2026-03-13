@@ -74,7 +74,7 @@ export const useZoomLogic = (
     
     if (!isDragging) return;
 
-    // 🌟 INVERSE PANNING: newOffset = dragStartOffset + (mouseDelta / zoom)
+    // 🌟 INVERSE PANNING: newOffset = dragStartOffset - (mouseDelta / zoom)
     // This allows world coordinates to track 1:1 with mouse movement.
     const dx = e.clientX - dragStartScreen.current.x;
     const dy = e.clientY - dragStartScreen.current.y;
@@ -82,8 +82,8 @@ export const useZoomLogic = (
     setCamera(prev => ({
       ...prev,
       offset: {
-        x: dragStartOffset.current.x + (dx / prev.zoom),
-        y: dragStartOffset.current.y + (dy / prev.zoom)
+        x: dragStartOffset.current.x - (dx / prev.zoom),
+        y: dragStartOffset.current.y - (dy / prev.zoom)
       }
     }));
   }, [getSimCoords, onGridPointerMove, unitStep, isDragging]);
@@ -111,19 +111,23 @@ export const useZoomLogic = (
     const el = containerRef.current;
     if (!el) return;
     
+    // Zoom transformation uses the current mouse world coordinates as the pivot point
     const rect = el.getBoundingClientRect();
-    const mx = e.clientX - rect.left - size.w / 2;
-    const my = e.clientY - rect.top - size.h / 2;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
     
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     
     setCamera(prev => {
+      const wx = (screenX - (size.w / 2 + prev.offset.x)) / (PIXELS_PER_METER * prev.zoom);
+      const wy = ((size.h / 2 + prev.offset.y) - screenY) / (PIXELS_PER_METER * prev.zoom);
+      
       const newZoom = Math.min(Math.max(prev.zoom * factor, 0.05), 50);
       return {
         zoom: newZoom,
         offset: {
-          x: mx - (mx - prev.offset.x) * (newZoom / prev.zoom),
-          y: my - (my - prev.offset.y) * (newZoom / prev.zoom)
+          x: screenX - size.w / 2 - wx * PIXELS_PER_METER * newZoom,
+          y: screenY - size.h / 2 + wy * PIXELS_PER_METER * newZoom
         }
       };
     });

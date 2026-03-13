@@ -8,7 +8,7 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
   const [maxTime, setMaxTime] = useState(0);
   
   const snapshotRef = useRef(null);
-  const timeStateRef = useRef({ time: 0, isPlaying: false, timeScale: 1, targetTime: null });
+  const timeStateRef = useRef({ time: 0, isPlaying: false, timeScale: 1, targetTime: null, totalPhysicsTicks: 0 });
   const hasStartedOnceRef = useRef(hasStartedOnce);
 
   useEffect(() => { timeStateRef.current.isPlaying = isPlaying; }, [isPlaying]);
@@ -50,6 +50,7 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
 
   const handleRestart = useCallback(() => {
     timeStateRef.current.time = 0;
+    timeStateRef.current.totalPhysicsTicks = 0;
     timeStateRef.current.targetTime = null;
     timeStateRef.current.isPlaying = false;
     setIsPlaying(false);
@@ -71,6 +72,7 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
     timeStateRef.current.isPlaying = false;
     setIsPlaying(false);
     timeStateRef.current.time = val;
+    timeStateRef.current.totalPhysicsTicks = Math.round(val / (1000 / 60 / 1000)); // approx ticks
     setDisplayTime(val);
 
     if (matterCanvasRef.current) {

@@ -49,36 +49,43 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
   const hasMultipleForces = forces.length > 1;
 
   // --- A. Velocity (Blue) ---
+  const PIXELS_PER_METER = 100;
   vels.forEach(v => {
-    const vx = v.magnitude * Math.cos((v.angle * Math.PI) / 180);
-    const vy = v.magnitude * Math.sin((v.angle * Math.PI) / 180);
-    const originX = body.position.x + (v.offsetX || 0);
-    const originY = body.position.y + (v.offsetY || 0);
-    drawArrow(ctx, toScreen, originX, originY, originX + vx * 0.2, originY + vy * 0.2, '#3B82F6', 2.5, hasMultipleVels ? 0.2 : 1.0);
+    const vx = v.magnitude * PIXELS_PER_METER * Math.cos((v.angle * Math.PI) / 180);
+    const vy = v.magnitude * PIXELS_PER_METER * Math.sin((v.angle * Math.PI) / 180);
+    const originX = body.position.x + (v.offsetX || 0) * PIXELS_PER_METER;
+    const originY = body.position.y + (v.offsetY || 0) * PIXELS_PER_METER;
+    drawArrow(ctx, toScreen, originX, originY, originX + vx * 0.2, originY + vy * 0.2, '#3B82F6', 2.5, 0.2);
   });
-  if (hasMultipleVels) {
+  if (vels.length > 0) {
+    const vsx = vSum.sx * PIXELS_PER_METER;
+    const vsy = vSum.sy * PIXELS_PER_METER;
     // Resultant Velocity is BLUE
-    drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + vSum.sx * 0.2, body.position.y + vSum.sy * 0.2, '#3B82F6', 3.5);
+    drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + vsx * 0.2, body.position.y + vsy * 0.2, '#3B82F6', 3.5, 1.0);
   }
 
   // --- B. Force (Red) ---
   forces.forEach(f => {
-    const fx = f.magnitude * Math.cos((f.angle * Math.PI) / 180);
-    const fy = f.magnitude * Math.sin((f.angle * Math.PI) / 180);
-    const originX = body.position.x + (f.offsetX || 0);
-    const originY = body.position.y + (f.offsetY || 0);
-    drawArrow(ctx, toScreen, originX, originY, originX + fx * 0.2, originY + fy * 0.2, '#EF4444', 2.5, hasMultipleForces ? 0.2 : 1.0);
+    const fx = f.magnitude * PIXELS_PER_METER * Math.cos((f.angle * Math.PI) / 180);
+    const fy = f.magnitude * PIXELS_PER_METER * Math.sin((f.angle * Math.PI) / 180);
+    const originX = body.position.x + (f.offsetX || 0) * PIXELS_PER_METER;
+    const originY = body.position.y + (f.offsetY || 0) * PIXELS_PER_METER;
+    drawArrow(ctx, toScreen, originX, originY, originX + fx * 0.2, originY + fy * 0.2, '#EF4444', 2.5, 0.2);
   });
-  if (hasMultipleForces) {
+  if (forces.length > 0) {
+    const fsx = fSum.sx * PIXELS_PER_METER;
+    const fsy = fSum.sy * PIXELS_PER_METER;
     // Resultant Force (of this object) is RED
-    drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + fSum.sx * 0.2, body.position.y + fSum.sy * 0.2, '#EF4444', 3.5);
+    drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + fsx * 0.2, body.position.y + fsy * 0.2, '#EF4444', 3.5, 1.0);
   }
 
   // --- C. Net Force (Purple) ---
   // RESERVED strictly for the total summation of ALL forces when explicitly requested
   if (showResultantVector) {
-    if (Math.abs(fSum.sx) > 0.01 || Math.abs(fSum.sy) > 0.01) {
-      drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + fSum.sx * 0.2, body.position.y + fSum.sy * 0.2, '#A855F7', 4.5);
+    const fsx = fSum.sx * PIXELS_PER_METER;
+    const fsy = fSum.sy * PIXELS_PER_METER;
+    if (Math.abs(fsx) > 1 || Math.abs(fsy) > 1) {
+      drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + fsx * 0.2, body.position.y + fsy * 0.2, '#A855F7', 4.5);
     }
   }
 };
