@@ -31,9 +31,9 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
   const { w, h } = size;
   const ox = w / 2 + offset.x;
   const oy = h / 2 + offset.y;
-  const basePixelsPerUnit = 50; 
+  const basePixelsPerUnit = 100; // 🌟 Updated to 100 for accuracy
   const pxPerUnit = basePixelsPerUnit * zoom;
-  const desiredPxGap = 80;
+  const desiredPxGap = 100; // Increased slightly for clarity
   const rawUnitStep = desiredPxGap / pxPerUnit;
   const unitStep = niceStep(rawUnitStep);
   const pxStep = unitStep * pxPerUnit; 
@@ -52,7 +52,7 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
 
   // Helper to convert MouseEvent to World Coordinates
   const getSimCoords = useCallback((e) => {
-    const el = e.currentTarget;
+    const el = containerRef.current;
     if (!el) return { wx: 0, wy: 0 };
     const rect = el.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
@@ -95,7 +95,7 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
       x: offsetStart.current.x + dx,
       y: offsetStart.current.y + dy,
     });
-  }, [activeTool, offsetStart, onGridPointerMove, getSimCoords, unitStep]);
+  }, [offsetStart, onGridPointerMove, getSimCoords, unitStep]);
 
   const handlePointerUp = useCallback((e) => {
     if (onGridPointerUp) {
@@ -107,6 +107,10 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
     dragging.current = false;
     setIsDragging(false);
     
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
     
@@ -124,13 +128,16 @@ export default function InteractiveGrid({ children, initialCamera, onCameraChang
     e.preventDefault();
     const el = containerRef.current;
     if (!el) return;
+    
     const rect = el.getBoundingClientRect();
+    // 🌟 Fix: Use coordinate relative to container center
     const mx = e.clientX - rect.left - size.w / 2;
     const my = e.clientY - rect.top - size.h / 2;
 
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const newZoom = Math.min(Math.max(zoom * factor, 0.05), 100);
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const newZoom = Math.min(Math.max(zoom * factor, 0.05), 50);
 
+    // 🌟 Correct offset calculation for centering on mouse
     setOffset((prev) => ({
       x: mx - (mx - prev.x) * (newZoom / zoom),
       y: my - (my - prev.y) * (newZoom / zoom),

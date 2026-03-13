@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ControlPanel from '../ControlPanel/ControlPanel';
 import InteractiveGrid from './InteractiveGrid';
-import MatterCanvas from './MatterCanvas';
+import MatterCanvas from './MatterCanvas/index';
 import Timebar, { ArrowUpIcon, ArrowDownIcon, RestartIcon, ChevronLeftIcon, ChevronRightIcon } from './Timebar';
 
 // 🌟 Import Hooks ที่แยกการทำงานออกมา
@@ -304,10 +304,17 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const handleGridPointerDown = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
       let nx = wx, ny = wy;
-      if (simState?.gridSnapping) {
+      
+      // 🌟 Snapping Priority: Object Outline > Simulation Grid
+      const snapHit = matterCanvasRef.current?.findSnapPoint(wx, wy, unitStep);
+      if (snapHit) {
+        nx = snapHit.x;
+        ny = snapHit.y;
+      } else if (simState?.gridSnapping) {
          nx = Math.round(wx / unitStep) * unitStep;
          ny = Math.round(wy / unitStep) * unitStep;
       }
+      
       const hit = matterCanvasRef.current?.startVectorDrag(nx, ny, activeTool, wx, wy);
       return hit || false;
     }
@@ -317,10 +324,16 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const handleGridPointerMove = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
       let nx = wx, ny = wy;
-      if (simState?.gridSnapping) {
+      
+      const snapHit = matterCanvasRef.current?.findSnapPoint(wx, wy, unitStep);
+      if (snapHit) {
+        nx = snapHit.x;
+        ny = snapHit.y;
+      } else if (simState?.gridSnapping) {
          nx = Math.round(wx / unitStep) * unitStep;
          ny = Math.round(wy / unitStep) * unitStep;
       }
+      
       matterCanvasRef.current?.moveVectorDrag(nx, ny);
     }
   }, [activeTool, simState?.gridSnapping]);
@@ -328,10 +341,16 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const handleGridPointerUp = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
       let nx = wx, ny = wy;
-      if (simState?.gridSnapping) {
+      
+      const snapHit = matterCanvasRef.current?.findSnapPoint(wx, wy, unitStep);
+      if (snapHit) {
+        nx = snapHit.x;
+        ny = snapHit.y;
+      } else if (simState?.gridSnapping) {
          nx = Math.round(wx / unitStep) * unitStep;
          ny = Math.round(wy / unitStep) * unitStep;
       }
+      
       const v = matterCanvasRef.current?.endVectorDrag(nx, ny);
       if (v) {
         const dx = v.currentX - v.startX;
@@ -552,6 +571,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
                       showResultantVector={!!simState?.showResultantVector}
                       timeStateRef={timeStateRef}
                       setIsPlaying={setIsPlaying}
+                      maxTime={maxTime}
                     />
 
                     <AnimatePresence>

@@ -1,7 +1,9 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, memo } from 'react';
 import Matter from 'matter-js';
 
-const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, timeStateRef, setIsPlaying }, ref) => {
+const PIXELS_PER_METER = 100;
+
+const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, timeStateRef, setIsPlaying, maxTime }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const bodyMap = useRef(new Map()); 
@@ -15,7 +17,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
 
   // 🌟 Ref to store all drawing-related props to avoid loop re-initialization
   const drawPropsRef = useRef({
-    size, offset, zoom, unitStep, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector
+    size, offset, zoom, unitStep, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, maxTime
   });
 
   useEffect(() => {
@@ -29,7 +31,8 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
     drawPropsRef.current.showResultantVector = showResultantVector;
     drawPropsRef.current.activeTool = activeTool;
     drawPropsRef.current.spawnConfig = spawnConfig;
-  }, [simState, gridSnapping, showCursorCoords, showResultantVector, activeTool, spawnConfig]);
+    drawPropsRef.current.maxTime = maxTime;
+  }, [simState, gridSnapping, showCursorCoords, showResultantVector, activeTool, spawnConfig, maxTime]);
 
   useEffect(() => {
     drawPropsRef.current.size = size;
@@ -86,6 +89,34 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
         }
       }
     },
+    findSnapPoint: (wx, wy, unitStep) => {
+      const engine = engineRef.current;
+      if (!engine) return null;
+      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground');
+      
+      const snapThreshold = 0.5; // Meters
+      let bestPoint = null;
+      let minDist = snapThreshold;
+
+      for (const body of bodies) {
+        // Snap to center
+        const dCenter = Math.sqrt((wx - body.position.x)**2 + (wy - body.position.y)**2);
+        if (dCenter < minDist) {
+          minDist = dCenter;
+          bestPoint = { x: body.position.x, y: body.position.y };
+        }
+
+        // Snap to bounds/vertices
+        for (const vertex of body.vertices) {
+          const dVertex = Math.sqrt((wx - vertex.x)**2 + (wy - vertex.y)**2);
+          if (dVertex < minDist) {
+            minDist = dVertex;
+            bestPoint = { x: vertex.x, y: vertex.y };
+          }
+        }
+      }
+      return bestPoint;
+    },
     startVectorDrag: (wx, wy, tool, rawX, rawY) => {
       const engine = engineRef.current;
       if (!engine) return;
@@ -100,7 +131,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
         let objId = null;
         for (const [id, b] of bodyMap.current.entries()) { if (b === body) { objId = id; break; } }
         if (objId) {
-          drawingVectorRef.current = { type: tool, objId, startX: body.position.x, startY: body.position.y, currentX: wx, currentY: wy };
+          drawingVectorRef.current = { type: tool, objId, startX: wx, startY: wy, currentX: wx, currentY: wy };
           return true;
         }
       }
@@ -219,12 +250,20 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
 
   // 🌟 UNIFIED PHYSICS & DRAW LOOP 🌟
   useEffect(() => {
+    // 🌟 Set resting threshold to prevent infinite bouncing
+    Matter.Resolver._restingThresh = 0.1;
+
     const engine = Matter.Engine.create({ positionIterations: 12, velocityIterations: 8 });
     engineRef.current = engine;
     bodyMap.current.clear();
     restoredBodiesRef.current.clear();
     
-    const ground = Matter.Bodies.rectangle(0, -20, 10000, 40, { isStatic: true, label: 'ground', friction: 1 });
+    const ground = Matter.Bodies.rectangle(0, -20.5, 10000, 41, { 
+        isStatic: true, 
+        label: 'ground', 
+        friction: 0.8,
+        frictionStatic: 1.2
+    });
     Matter.Composite.add(engine.world, ground);
     setSimSyncToken(prev => prev + 1);
 
@@ -250,7 +289,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
     const DT = 1 / HZ;
     let lastSave = performance.now();
 
-    const drawArrow = (ctx, toScreen, fromWx, fromWy, toWx, toWy, color) => {
+    const drawArrow = (ctx, toScreen, fromWx, fromWy, toWx, toWy, color, thickness = 2.5) => {
       const fromPos = toScreen(fromWx, fromWy);
       const toPos = toScreen(toWx, toWy);
       const headlen = 10;
@@ -258,7 +297,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
       ctx.beginPath(); ctx.moveTo(fromPos.x, fromPos.y); ctx.lineTo(toPos.x, toPos.y);
       ctx.lineTo(toPos.x - headlen * Math.cos(angle - Math.PI / 6), toPos.y - headlen * Math.sin(angle - Math.PI / 6));
       ctx.moveTo(toPos.x, toPos.y); ctx.lineTo(toPos.x - headlen * Math.cos(angle + Math.PI / 6), toPos.y - headlen * Math.sin(angle + Math.PI / 6));
-      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = thickness; ctx.stroke();
     };
 
     const loop = (now) => {
@@ -270,6 +309,8 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
       if (timeStateRef?.current) {
         if (timeStateRef.current.isPlaying) {
           const tScale = timeStateRef.current.timeScale || 1;
+          const maxT = drawPropsRef.current.maxTime || Infinity;
+
           if (timeStateRef.current.targetTime !== null) {
               const target = timeStateRef.current.targetTime;
               if (target > timeStateRef.current.time) {
@@ -284,11 +325,27 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
               accumulator += deltaBrowser * tScale;
               let steps = 0;
               while (accumulator >= TIME_STEP && steps < 10) {
+                 // 🌟 Hard Stop Logic
+                 if (timeStateRef.current.time >= maxT) {
+                   timeStateRef.current.time = maxT;
+                   timeStateRef.current.isPlaying = false;
+                   setIsPlaying(false);
+                   accumulator = 0;
+                   break;
+                 }
+
                  if (simStateRef.current?.objects) {
                     for (const obj of simStateRef.current.objects) {
                        if (!obj.isSpawned) continue;
                        const body = bodyMap.current.get(obj.id);
                        if (!body) continue;
+
+                       // 🌟 Velocity Threshold to prevent sliding
+                       const speedSq = body.velocity.x**2 + body.velocity.y**2;
+                       if (speedSq < 0.01 && Math.abs(body.position.y - (body.circleRadius || body.plugin?.size/2 || 0)) < 0.05) {
+                          Matter.Body.setVelocity(body, { x: 0, y: 0 });
+                       }
+
                        const forces = [...(obj.values?.forces || [])];
                        if (obj.values?.force) forces.push({ magnitude: obj.values.force, angle: obj.values.forceAngle || 0 });
                        for (const f of forces) {
@@ -324,7 +381,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
       if (ctx) {
           const { size, offset, zoom, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, unitStep } = drawPropsRef.current;
           const { w, h } = size;
-          const pxPerUnit = 50 * zoom;
+          const pxPerUnit = PIXELS_PER_METER * zoom;
           const ox = w/2 + offset.x; const oy = h/2 + offset.y;
           const toScreen = (wx, wy) => ({ x: ox + wx * pxPerUnit, y: oy - wy * pxPerUnit });
 
@@ -360,12 +417,36 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
               if (!obj.isSpawned) return;
               const body = bodyMap.current.get(obj.id);
               if (!body) return;
+
+              let sumVx = 0, sumVy = 0;
+              let sumFx = 0, sumFy = 0;
+
               const vels = [...(obj.values?.velocities || [])];
               if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
-              vels.forEach(v => drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + (v.magnitude * Math.cos(v.angle*Math.PI/180)) * 0.2, body.position.y + (v.magnitude * Math.sin(v.angle*Math.PI/180)) * 0.2, '#3B82F6'));
+              vels.forEach(v => {
+                const vx = v.magnitude * Math.cos(v.angle*Math.PI/180);
+                const vy = v.magnitude * Math.sin(v.angle*Math.PI/180);
+                sumVx += vx; sumVy += vy;
+                drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + vx * 0.2, body.position.y + vy * 0.2, '#3B82F6');
+              });
+
               const forces = [...(obj.values?.forces || [])];
               if (obj.values?.force) forces.push({ magnitude: obj.values.force, angle: obj.values.forceAngle|| 0 });
-              forces.forEach(f => drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + (f.magnitude * Math.cos(f.angle*Math.PI/180)) * 0.2, body.position.y + (f.magnitude * Math.sin(f.angle*Math.PI/180)) * 0.2, '#EF4444'));
+              forces.forEach(f => {
+                const fx = f.magnitude * Math.cos(f.angle*Math.PI/180);
+                const fy = f.magnitude * Math.sin(f.angle*Math.PI/180);
+                sumFx += fx; sumFy += fy;
+                drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + fx * 0.2, body.position.y + fy * 0.2, '#EF4444');
+              });
+
+              // 🌟 Render Resultant Vector (Purple)
+              if (showResultantVector) {
+                const resX = (sumVx + sumFx) * 0.2;
+                const resY = (sumVy + sumFy) * 0.2;
+                if (Math.abs(resX) > 0.01 || Math.abs(resY) > 0.01) {
+                  drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + resX, body.position.y + resY, '#A855F7', 4);
+                }
+              }
             });
           }
 
@@ -417,7 +498,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
     return () => { 
       cancelAnimationFrame(raf); 
       Matter.Engine.clear(engine);
-      Matter.Composite.clear(engine.world, false); // Clear bodies specifically
+      Matter.Composite.clear(engine.world, false); 
     };
   }, [engineResetToken]);
 
@@ -437,7 +518,11 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
         const startX = obj.position?.x ?? 0;
         const startY = obj.position?.y ?? (obj.values?.height ?? 10);
         const s = obj.size ?? 1;
-        const opts = { restitution: obj.values?.restitution || 0, friction: 0.8 };
+        const opts = { 
+            restitution: obj.values?.restitution || 0, 
+            friction: 0.5,
+            frictionStatic: 0.8
+        };
         
         if (obj.shape === 'circle') {
           body = Matter.Bodies.circle(startX, startY, s, opts);
