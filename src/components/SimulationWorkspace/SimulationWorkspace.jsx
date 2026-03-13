@@ -6,6 +6,38 @@ import MatterCanvas from './MatterCanvas';
 import Timebar, { ArrowUpIcon, ArrowDownIcon } from './Timebar';
 
 // 🌟 Component แยกที่นำกลับมาใช้ซ้ำได้
+const HoldableButton = ({ onAction, className, children, title, tabIndex }) => {
+  const timerRef = useRef(null);
+  
+  const start = useCallback(() => {
+    onAction();
+    timerRef.current = setTimeout(() => {
+      timerRef.current = setInterval(onAction, 80);
+    }, 400);
+  }, [onAction]);
+
+  const stop = useCallback(() => {
+    clearTimeout(timerRef.current);
+    clearInterval(timerRef.current);
+    timerRef.current = null;
+  }, []);
+
+  useEffect(() => () => stop(), [stop]);
+
+  return (
+    <button 
+      tabIndex={tabIndex}
+      onPointerDown={start}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      className={className}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+};
+
 const SharedSlider = ({ label, value, min, max, step, onChange }) => (
   <div className="flex items-center gap-2 px-1">
     {label && <span className="text-xs font-semibold text-theme-muted">{label}</span>}
@@ -30,6 +62,7 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const [hasStartedOnce, setHasStartedOnce] = useState(false); 
   const [timeScale, setTimeScale] = useState(1);
   const [displayTime, setDisplayTime] = useState(0);
+  const snapshotRef = useRef(null); 
 
   // --- State สำหรับ ถังขยะ และ Tooltip (Toast) ---
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
@@ -116,6 +149,14 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
   const handleTogglePlay = () => {
     if (!hasStartedOnce) setHasStartedOnce(true);
     const next = !timeStateRef.current.isPlaying;
+    
+    // 🌟 Save snapshot before starting simulation
+    if (next && !timeStateRef.current.isPlaying) {
+      snapshotRef.current = {
+        simState: JSON.parse(JSON.stringify(simState))
+      };
+    }
+    
     timeStateRef.current.isPlaying = next; 
     setIsPlaying(next); 
   };
@@ -126,8 +167,14 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
     timeStateRef.current.isPlaying = false;
     setIsPlaying(false);
     setDisplayTime(0);
-    // Reset engine only — do NOT remount ControlPanel (that would delete objects).
-    // resetSimulation() re-adds all bodies from simState at their original positions.
+
+    // 🌟 Roll back properties to the snapshot before "Play"
+    if (snapshotRef.current) {
+      const restored = snapshotRef.current.simState;
+      setSimState(restored);
+      if (onSaveControlState) onSaveControlState(restored);
+    }
+
     if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
   };
   // Keep ref in sync so the keyboard shortcut always calls the latest version
@@ -227,6 +274,28 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
       const currentObjects = simState?.objects || [];
       const currentBodies = bodiesRef.current || {};
       
+      // 🌟 Check if clicking a VECTOR first
+      const vectorHit = matterCanvasRef.current?.findVectorAt(wx, wy);
+      if (vectorHit) {
+        setSimState(prev => {
+          const newState = {
+            ...prev,
+            objects: prev.objects.map(o => {
+              if (o.id === vectorHit.objId) {
+                const newValues = { ...o.values };
+                if (vectorHit.type === 'velocity') { delete newValues.velocity; delete newValues.angle; }
+                if (vectorHit.type === 'force') { delete newValues.force; delete newValues.forceAngle; }
+                return { ...o, values: newValues };
+              }
+              return o;
+            })
+          };
+          if (onSaveControlState) onSaveControlState(newState);
+          return newState;
+        });
+        return;
+      }
+
       let targetId = null;
       let minDistance = Infinity;
 
@@ -238,7 +307,6 @@ export default function SimulationWorkspace({ activeSim, isInteracting, onSaveCo
          const dy = wy - pos.y;
          const dist = Math.sqrt(dx*dx + dy*dy);
          
-         // Erase hitbox: 2.5x the object's physics radius for easier clicking
          if (dist < (obj.size || 1) * 2.5 && dist < minDistance) {
             minDistance = dist;
             targetId = obj.id;
@@ -495,6 +563,7 @@ return (
                       spawnConfig={spawnConfig}
                       gridSnapping={!!simState?.gridSnapping}
                       showCursorCoords={!!simState?.showCursorCoords}
+                      showResultantVector={!!simState?.showResultantVector}
                       timeStateRef={timeStateRef}
                       setIsPlaying={setIsPlaying}
                     />
@@ -534,22 +603,36 @@ return (
                                 }}
                               />
                               <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
-                                <button tabIndex={-1} onClick={() => {
-                                  const val = Number(vectorEditor.magnitude) + 1;
-                                  setVectorEditor(prev => ({ ...prev, magnitude: val }));
-                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { velocity: val });
-                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { force: val });
-                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300">
+                                <HoldableButton 
+                                  tabIndex={-1} 
+                                  onAction={() => {
+                                    setVectorEditor(prev => {
+                                      if (!prev) return null;
+                                      const val = Number(prev.magnitude) + 1;
+                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { velocity: val });
+                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { force: val });
+                                      return { ...prev, magnitude: val };
+                                    });
+                                  }} 
+                                  className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300"
+                                >
                                   <ArrowUpIcon />
-                                </button>
-                                <button tabIndex={-1} onClick={() => {
-                                  const val = Math.max(0, Number(vectorEditor.magnitude) - 1);
-                                  setVectorEditor(prev => ({ ...prev, magnitude: val }));
-                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { velocity: val });
-                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { force: val });
-                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22]">
+                                </HoldableButton>
+                                <HoldableButton 
+                                  tabIndex={-1} 
+                                  onAction={() => {
+                                    setVectorEditor(prev => {
+                                      if (!prev) return null;
+                                      const val = Math.max(0, Number(prev.magnitude) - 1);
+                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { velocity: val });
+                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { force: val });
+                                      return { ...prev, magnitude: val };
+                                    });
+                                  }} 
+                                  className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22]"
+                                >
                                   <ArrowDownIcon />
-                                </button>
+                                </HoldableButton>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-md px-2 py-1 relative pr-8">
@@ -569,22 +652,36 @@ return (
                                 }}
                               />
                               <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
-                                <button tabIndex={-1} onClick={() => {
-                                  const val = Number(vectorEditor.angle) + 1;
-                                  setVectorEditor(prev => ({ ...prev, angle: val }));
-                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { angle: val });
-                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { forceAngle: val });
-                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300">
+                                <HoldableButton 
+                                  tabIndex={-1} 
+                                  onAction={() => {
+                                    setVectorEditor(prev => {
+                                      if (!prev) return null;
+                                      const val = Number(prev.angle) + 1;
+                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { angle: val });
+                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { forceAngle: val });
+                                      return { ...prev, angle: val };
+                                    });
+                                  }} 
+                                  className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300"
+                                >
                                   <ArrowUpIcon />
-                                </button>
-                                <button tabIndex={-1} onClick={() => {
-                                  const val = Number(vectorEditor.angle) - 1;
-                                  setVectorEditor(prev => ({ ...prev, angle: val }));
-                                  if (vectorEditor.type === 'velocity') controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { angle: val });
-                                  else controlPanelRef.current?.updateObjectValues(vectorEditor.objId, { forceAngle: val });
-                                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22]">
+                                </HoldableButton>
+                                <HoldableButton 
+                                  tabIndex={-1} 
+                                  onAction={() => {
+                                    setVectorEditor(prev => {
+                                      if (!prev) return null;
+                                      const val = Number(prev.angle) - 1;
+                                      if (prev.type === 'velocity') controlPanelRef.current?.updateObjectValues(prev.objId, { angle: val });
+                                      else controlPanelRef.current?.updateObjectValues(prev.objId, { forceAngle: val });
+                                      return { ...prev, angle: val };
+                                    });
+                                  }} 
+                                  className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22]"
+                                >
                                   <ArrowDownIcon />
-                                </button>
+                                </HoldableButton>
                               </div>
                             </div>
                           </div>

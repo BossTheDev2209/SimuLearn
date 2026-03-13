@@ -103,6 +103,7 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
   const [showTrajectory, setShowTrajectory] = useState(initialState?.showTrajectory !== undefined ? initialState.showTrajectory : true);
   const [gridSnapping, setGridSnapping] = useState(initialState?.gridSnapping !== undefined ? initialState.gridSnapping : false);
   const [showCursorCoords, setShowCursorCoords] = useState(initialState?.showCursorCoords !== undefined ? initialState.showCursorCoords : false);
+  const [showResultantVector, setShowResultantVector] = useState(initialState?.showResultantVector !== undefined ? initialState.showResultantVector : true);
 
   // Keep objectCounterRef in sync
   useEffect(() => { objectCounterRef.current = objectCounter; }, [objectCounter]);
@@ -137,10 +138,10 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
 
   useEffect(() => {
     if (onUpdate) {
-      onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords });
+      onUpdate({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords]);
+  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector]);
 
   const [pickPending, setPickPending] = useState(false);
   const [pendingColor, setPendingColor] = useState('#22C55E');
@@ -352,6 +353,7 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
             <ToggleRow label="แสดงเส้นวิถี" checked={showTrajectory} onChange={setShowTrajectory} />
             <ToggleRow label="สแนปเมาส์เข้ากับตาราง" checked={gridSnapping} onChange={setGridSnapping} />
             <ToggleRow label="แสดงพิกัดตามเมาส์" checked={showCursorCoords} onChange={setShowCursorCoords} />
+            <ToggleRow label="แสดงผลรวมเวกเตอร์" checked={showResultantVector} onChange={setShowResultantVector} />
           </div>
         </div>
       </div>

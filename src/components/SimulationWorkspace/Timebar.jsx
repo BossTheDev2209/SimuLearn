@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // --- SVG Icons Components (ย่อขนาดให้พอดี Toolbar) ---
 const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>;
@@ -39,14 +39,21 @@ export default function Timebar({
     }
   };
 
+  const onSeekRef = useRef(onSeek);
+  useEffect(() => { onSeekRef.current = onSeek; }, [onSeek]);
+
   // เวลากดปุ่มลูกศรจิ๋วของเรา
-  const handleStep = (amount) => {
-    let current = parseFloat(inputVal);
-    if (isNaN(current)) current = 0;
-    const nextVal = Math.max(0, current + amount);
-    setInputVal(nextVal.toFixed(1));
-    onSeek(nextVal);
-  };
+  const handleStep = useCallback((amount) => {
+    setInputVal(prev => {
+      let current = parseFloat(prev);
+      if (isNaN(current)) current = 0;
+      const nextVal = Math.max(0, current + amount);
+      const formatted = nextVal.toFixed(1);
+      // 🔥 แจ้งเตือน Simulator ให้ขยับเวลาตาม
+      if (onSeekRef.current) onSeekRef.current(nextVal);
+      return formatted;
+    });
+  }, []);
 
   // เวลากด Enter ให้สลับ Play / Pause
   const handleKeyDown = (e) => {
@@ -56,6 +63,25 @@ export default function Timebar({
       onTogglePlay(); // กด Enter = Play/Pause
     }
   };
+
+  // 🌟 Hold button to repeat action
+  const stepTimerRef = useRef(null);
+  const startStepping = useCallback((amount) => {
+    handleStep(amount);
+    // Delay slightly before repeating
+    stepTimerRef.current = setTimeout(() => {
+      stepTimerRef.current = setInterval(() => handleStep(amount), 80);
+    }, 400);
+  }, [handleStep]);
+
+  const stopStepping = useCallback(() => {
+    clearTimeout(stepTimerRef.current);
+    clearInterval(stepTimerRef.current);
+    stepTimerRef.current = null;
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => () => stopStepping(), [stopStepping]);
 
   return (
     <div className="relative font-['Chakra_Petch'] text-gray-800">
@@ -119,10 +145,22 @@ export default function Timebar({
 
             {/* Custom Arrows ของเราเอง */}
             <div className="flex flex-col ml-2 bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
-              <button onClick={() => handleStep(0.1)} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300">
+              <button 
+                onPointerDown={() => startStepping(0.1)}
+                onPointerUp={stopStepping}
+                onPointerLeave={stopStepping}
+                className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 transition-colors"
+                title="เพิ่มเวลา"
+              >
                 <ArrowUpIcon />
               </button>
-              <button onClick={() => handleStep(-0.1)} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22]">
+              <button 
+                onPointerDown={() => startStepping(-0.1)}
+                onPointerUp={stopStepping}
+                onPointerLeave={stopStepping}
+                className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 text-gray-600 dark:text-gray-300 border-t border-[#d6cfbe] dark:border-[#1E1F22] transition-colors"
+                title="ลดเวลา"
+              >
                 <ArrowDownIcon />
               </button>
             </div>

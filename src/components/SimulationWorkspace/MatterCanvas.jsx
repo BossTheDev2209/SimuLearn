@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import Matter from 'matter-js';
 
-const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, timeStateRef, setIsPlaying }, ref) => {
+const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics, onPhysicsChange, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector, timeStateRef, setIsPlaying }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const bodyMap = useRef(new Map()); 
@@ -98,8 +98,10 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
           drawingVectorRef.current = {
             type: activeTool,
             objId,
-            startX: body.position.x,
-            startY: body.position.y,
+            startX: wx, // 🌟 Start from exactly where clicked
+            startY: wy,
+            bodyStartX: body.position.x,
+            bodyStartY: body.position.y,
             currentX: wx,
             currentY: wy
           };
@@ -126,8 +128,50 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         return res;
       }
       return null;
+    },
+    // 🌟 Helper for Erase tool to find if user clicked a vector
+    findVectorAt: (wx, wy) => {
+      if (!simStateRef.current?.objects) return null;
+      for (const obj of simStateRef.current.objects) {
+        if (!obj.isSpawned) continue;
+        const body = bodyMap.current.get(obj.id);
+        if (!body) continue;
+        
+        const px = body.position.x;
+        const py = body.position.y;
+        
+        // Check Velocity Vector
+        if (obj.values?.velocity) {
+          const mag = obj.values.velocity;
+          const ang = obj.values.angle || 0;
+          const tox = px + (mag * Math.cos(ang * Math.PI / 180)) * 0.2;
+          const toy = py + (mag * Math.sin(ang * Math.PI / 180)) * 0.2;
+          
+          if (distToSegment(wx, wy, px, py, tox, toy) < 0.2) return { objId: obj.id, type: 'velocity' };
+        }
+        
+        // Check Force Vector
+        if (obj.values?.force) {
+          const mag = obj.values.force;
+          const ang = obj.values.forceAngle || 0;
+          const tox = px + (mag * Math.cos(ang * Math.PI / 180)) * 0.2;
+          const toy = py + (mag * Math.sin(ang * Math.PI / 180)) * 0.2;
+          
+          if (distToSegment(wx, wy, px, py, tox, toy) < 0.2) return { objId: obj.id, type: 'force' };
+        }
+      }
+      return null;
     }
   }));
+
+  // Math helper for ray-casting / hit test on line segments
+  const distToSegment = (px, py, x1, y1, x2, y2) => {
+    const l2 = (x1 - x2)**2 + (y1 - y2)**2;
+    if (l2 === 0) return Math.sqrt((px-x1)**2 + (py-y1)**2);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.sqrt((px - (x1 + t * (x2 - x1)))**2 + (py - (y1 + t * (y2 - y1)))**2);
+  };
 
   useEffect(() => {
     const engine = Matter.Engine.create({
@@ -514,6 +558,33 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
 
             drawArrow(px, py, toX, toY, '#EF4444'); // Main Red
           }
+
+          // 🌟 Resultant Vector (Purple) - Only if both velocity and force exist
+          if (showResultantVector && obj.values?.velocity > 0.1 && obj.values?.force > 0.1) {
+            let totalDx = 0;
+            let totalDy = 0;
+            
+            totalDx += (obj.values.velocity * Math.cos((obj.values.angle || 0) * Math.PI / 180)) * 0.2;
+            totalDy += (obj.values.velocity * Math.sin((obj.values.angle || 0) * Math.PI / 180)) * 0.2;
+            
+            totalDx += (obj.values.force * Math.cos((obj.values.forceAngle || 0) * Math.PI / 180)) * 0.2;
+            totalDy += (obj.values.force * Math.sin((obj.values.forceAngle || 0) * Math.PI / 180)) * 0.2;
+            
+            if (Math.abs(totalDx) > 0.01 || Math.abs(totalDy) > 0.01) {
+              drawArrow(px, py, px + totalDx, py + totalDy, '#A855F7'); // Purple
+            }
+          }
+
+          // 🌟 Vector Base Dots (Small indicator where vector connects)
+          if (obj.values?.velocity || obj.values?.force) {
+            ctx.beginPath();
+            ctx.arc(px * pxPerUnit + ox, oy - py * pxPerUnit, 3, 0, 2 * Math.PI);
+            ctx.fillStyle = '#4B5563'; // Gray-600
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
         });
       }
 
@@ -534,6 +605,33 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
         }
         
         drawArrow(v.startX, v.startY, v.currentX, v.currentY, color);
+
+        // 🌟 Vertex Dot for Vector Connection (Recolored to tool color)
+        ctx.beginPath();
+        ctx.arc(v.startX * pxPerUnit + ox, oy - v.startY * pxPerUnit, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Vertex Dot for GRID Snapping
+      if (gridSnapping && mouseRef.current.x > -1000) {
+        let wx = (mouseRef.current.x - ox) / pxPerUnit;
+        let wy = (oy - mouseRef.current.y) / pxPerUnit;
+        const snappedWx = Math.round(wx);
+        const snappedWy = Math.round(wy);
+        const sx = ox + snappedWx * pxPerUnit;
+        const sy = oy - snappedWy * pxPerUnit;
+
+        ctx.beginPath();
+        ctx.arc(sx, sy, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#9CA3AF'; // Gray-400 for grid snap
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
 
       // Hologram preview (only when 'add' tool active)
@@ -617,7 +715,7 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, simState, initialPhysics,
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [w, h, ox, oy, pxPerUnit, activeTool, spawnConfig, gridSnapping, showCursorCoords]);
+  }, [w, h, ox, oy, pxPerUnit, activeTool, spawnConfig, gridSnapping, showCursorCoords, showResultantVector]);
 
   return (
     <canvas 

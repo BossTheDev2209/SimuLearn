@@ -96,7 +96,18 @@ function App() {
             return;
           }
 
-          const formattedSimulations = apiHistory.map((item) => {
+          // 🌟 Deduplicate by ID to prevent UI glitches (double items)
+          const uniqueItems = [];
+          const seenIds = new Set();
+          apiHistory.forEach(item => {
+            const id = (item?.id || item?._id || "").toString();
+            if (id && !seenIds.has(id)) {
+              seenIds.add(id);
+              uniqueItems.push(item);
+            }
+          });
+
+          const formattedSimulations = uniqueItems.map((item) => {
             const simType = item?.type || item?.topic_type || 'free_fall';
             let parsedData = null;
             try {
