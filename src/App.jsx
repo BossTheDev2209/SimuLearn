@@ -27,6 +27,7 @@ function App() {
 
   const [simulations, setSimulations] = useState([]);
   const [activeSimId, setActiveSimId] = useState(() => localStorage.getItem('activeSimId') || null);
+  const isInitialLoad = useRef(true); // 🌟 Guard for Strict Mode / Double mounting
 
   useEffect(() => {
     if (activeSimId) {
@@ -85,25 +86,43 @@ function App() {
   }, [activeSimId, myUserId]);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchData = async () => {
       if (!myUserId) return;
+      
+      // 🌟 Guard: If this is an accidental double-hit in Strict Mode, abort early
+      if (simulations.length > 0 && isInitialLoad.current === false) {
+         console.log("⏩ Skipping fetchData: Data already exists and initial load is complete.");
+         return;
+      }
+
+      console.log(`%c🔄 fetchData TRIGGERED at: ${new Date().getTime()}`, "color: #3b82f6; font-weight: bold;");
+      
       if (!myUserId.startsWith("guest_")) {
         try {
-          const res = await fetch(`/api/history/${myUserId}`);
+          console.log("📡 Fetching history from API...");
+          const res = await fetch(`/api/history/${myUserId}`, { signal: controller.signal });
           if (!res.ok) throw new Error(`API error: ${res.status}`);
           const apiHistory = await res.json();
 
           if (!Array.isArray(apiHistory)) {
-            console.warn("API ไม่ได้ส่ง Array กลับมา:", apiHistory);
+            console.warn("❌ API returned non-array:", apiHistory);
             return;
           }
 
-          // 🌟 Robust Deduplication by ID
+          console.log(`📊 Data received. Length: ${apiHistory.length}`);
+
+          // 🌟 Robust Deduplication by ID (Deep Logging)
           const seenIds = new Set();
           const formattedSimulations = apiHistory
             .map((item) => {
               const id = (item?.id || item?._id || "").toString();
-              if (!id || seenIds.has(id)) return null;
+              if (!id) return null;
+              
+              if (seenIds.has(id)) {
+                console.warn(`⚠️ DUPLICATE ID detected and filtered: ${id}`);
+                return null;
+              }
               seenIds.add(id);
 
               const simType = item?.type || item?.topic_type || 'free_fall';
@@ -116,12 +135,10 @@ function App() {
                   const rawVariables = item?.calculated_variables || item?.data?.variables || {};
                   parsedData = {
                     simulationType: simType,
-                    ai_description: item?.ai_description || item?.data?.description || "",
                     ...(template?.parseData(rawVariables) ?? {})
                   };
                 }
               } catch (parseErr) {
-                console.warn("parse item failed, skipping data:", id, parseErr);
                 return null;
               }
 
@@ -139,9 +156,18 @@ function App() {
 
           formattedSimulations.sort((a, b) => b.createdAt - a.createdAt);
           
+          console.log("💾 Simulations before update:", simulations.length);
+          console.log(`✅ setSimulations CALLED with ${formattedSimulations.length} unique items`);
+          
+          // 🌟 Atomic state replacement
           setSimulations(formattedSimulations);
+          isInitialLoad.current = false;
         } catch (err) {
-          console.error("โหลดประวัติจาก API ไม่ขึ้น:", err);
+          if (err.name === 'AbortError') {
+            console.log("⏹️ Fetch aborted by cleanup");
+            return;
+          }
+          console.error("❌ History fetch error:", err);
         } finally {
           setIsHistoryLoading(false);
         }
@@ -151,14 +177,11 @@ function App() {
           const docRef = doc(db, "users", myUserId);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists() && docSnap.data().settings) {
-            const cloudSettings = docSnap.data().settings;
-            setUserPreferences(cloudSettings);
-            
-            if (cloudSettings.theme) localStorage.setItem("theme", cloudSettings.theme);
-            if (cloudSettings.lang) localStorage.setItem("lang", cloudSettings.lang);
+            setUserPreferences(docSnap.data().settings);
           }
-        } catch(e) { console.error("โหลดการตั้งค่าไม่ขึ้น", e) }
+        } catch(e) { }
       } else {
+        setIsHistoryLoading(false);
         const localTheme = localStorage.getItem("theme") || 'light';
         const localLang = localStorage.getItem("lang") || 'th';
         setUserPreferences({ theme: localTheme, lang: localLang });
@@ -166,6 +189,10 @@ function App() {
     };
 
     fetchData();
+    return () => {
+      console.log("🧹 Cleaning up fetchData effect...");
+      controller.abort();
+    };
   }, [myUserId]);
 
   useEffect(() => {
@@ -239,7 +266,15 @@ function App() {
   const activeSim = simulations.find((s) => s.id === activeSimId) || null;
 
   const handleSend = async (text) => {
-    const newSimId = Date.now().toString();
+    if (!text.trim() || isLoading) return;
+
+    // 🌟 1. SET LOADING IMMEDIATELY
+    setIsLoading(true);
+    
+    // 🌟 2. GENERATE STABLE UUID
+    const newSimId = crypto.randomUUID();
+    console.log(`🆕 Creating NEW simulation. UUID: ${newSimId}`);
+    
     const newSim = {
       id: newSimId,
       title: text,
@@ -248,9 +283,9 @@ function App() {
       userId: myUserId
     };
 
+    // 🌟 3. OPTIMISTIC UI UPDATE WITH UUID
     setSimulations((prev) => [newSim, ...prev]);
     setActiveSimId(newSimId);
-    setIsLoading(true);
     setMessages((prev) => [...prev, { sender: 'user', text }]);
 
     if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -266,14 +301,13 @@ function App() {
         }),
         signal: abortControllerRef.current.signal
       });
+
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const apiData = await res.json();    
-      console.log("DEBUG: Backend Response Data ->", apiData); // 🌟 เพิ่มบรรทัดนี้ให้คุณดูใน Console
 
       const simType = apiData.type || apiData.topic_type || 'free_fall';
       const template = getSimulationTemplate(simType);
       
-      // ดึงค่า vx, vy จากทุกแหล่งที่อาจจะมีได้ (Root, variables, calculated_variables)
       const getVal = (paths, fallback = 0) => {
         for (const p of paths) if (p !== undefined && p !== null) return p;
         return fallback;
@@ -282,24 +316,11 @@ function App() {
       const rawVariables = {
         ...(apiData.variables || {}),
         ...(apiData.calculated_variables || {}),
-        // Harvesting from root as well
         mass: getVal([apiData.mass, apiData.variables?.mass, apiData.calculated_variables?.mass], 1),
         height: getVal([apiData.height, apiData.variables?.height, apiData.calculated_variables?.height, apiData.h_start, apiData.variables?.h_start], 10),
         gravity: getVal([apiData.gravity, apiData.variables?.gravity], 9.8),
-        vx: getVal([
-          apiData.vx, 
-          apiData.variables?.vx, 
-          apiData.calculated_variables?.vx, 
-          apiData.variables?.v0_x,
-          apiData.v0_x
-        ], 0),
-        vy: getVal([
-          apiData.vy, 
-          apiData.variables?.vy, 
-          apiData.calculated_variables?.vy, 
-          apiData.variables?.v0_y,
-          apiData.v0_y
-        ], 0)
+        vx: getVal([apiData.vx, apiData.variables?.vx, apiData.calculated_variables?.vx, apiData.variables?.v0_x, apiData.v0_x], 0),
+        vy: getVal([apiData.vy, apiData.variables?.vy, apiData.calculated_variables?.vy, apiData.variables?.v0_y, apiData.v0_y], 0)
       };
 
       const formattedData = {
@@ -308,20 +329,21 @@ function App() {
         ...template.parseData(rawVariables)
       };
 
+      // 🌟 4. FINAL ID (Prefer Backend ID if exists, otherwise keep stable UUID)
       const finalId = (apiData.id || apiData._id || newSimId).toString();
 
       if (!apiData.id && !myUserId.startsWith("guest_")) {
-         // Backend did not save to DB (and not guest), so Frontend handles it
+         // 🌟 5. IDEMPOTENT ATOMIC WRITE WITH SETDOC
+         console.log(`💾 Persisting simulation to Firestore. FinalId: ${finalId}`);
          await setDoc(doc(db, "simulations", finalId), {
            title: apiData.title || text,
            userId: myUserId,
            data: formattedData,
            createdAt: serverTimestamp()
-         });
+         }, { merge: true });
       }
 
       setSimulations((prev) => {
-         // 🌟 CRITICAL: Filter out BOTH the temp ID and the final ID to prevent race conditions
          const filtered = prev.filter(s => s.id !== newSimId && s.id !== finalId);
          return [
             { 
@@ -336,17 +358,17 @@ function App() {
       });
       setActiveSimId(finalId);
     } catch (err) {
-      if (err.name === 'AbortError') {
-        console.log('Simulation generation cancelled by user');
-        return;
-      }
-      console.error("ยิง API ไม่ติด:", err);
-      if (err.message.includes("521") || err.name === "SyntaxError" || err.message.includes("Failed to fetch")) {
+      if (err.name === 'AbortError') return;
+      console.error("API Error:", err);
+      // Remove the failed optimistic update
+      setSimulations(prev => prev.filter(s => s.id !== newSimId));
+      if (err.message.includes("521") || err.name === "SyntaxError") {
         setApiError("521");
       } else {
-        alert("เซิร์ฟเวอร์เปิดหรือยัง? หรืออาจเกิดข้อผิดพลาดในการสร้างแบบจำลองครับ");
+        alert("เกิดข้อผิดพลาดในการสร้างแบบจำลองครับ");
       }
     } finally {
+      // 🌟 6. ENSURE LOADING IS TURNED OFF
       setIsLoading(false);
       abortControllerRef.current = null;
     }
@@ -492,6 +514,7 @@ function App() {
                 messages={messages}
                 onSendMessage={handleSend}
                 setIsInteracting={setIsInteracting}
+                isLoading={isLoading}
               />
             </div>
           </div>

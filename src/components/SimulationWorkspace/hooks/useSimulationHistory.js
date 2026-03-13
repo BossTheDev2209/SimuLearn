@@ -17,6 +17,7 @@ export function useSimulationHistory(simState, setSimState, onSaveControlState) 
     redoStackRef.current.push(JSON.parse(JSON.stringify(simState)));
     setSimState(previous);
     if (onSaveControlState) onSaveControlState(previous);
+    return previous; // Return to allow external sync
   }, [simState, setSimState, onSaveControlState]);
 
   const redo = useCallback(() => {
@@ -25,6 +26,7 @@ export function useSimulationHistory(simState, setSimState, onSaveControlState) 
     historyRef.current.push(JSON.parse(JSON.stringify(simState)));
     setSimState(next);
     if (onSaveControlState) onSaveControlState(next);
+    return next; // Return to allow external sync
   }, [simState, setSimState, onSaveControlState]);
 
   const undoRef = useRef(undo);

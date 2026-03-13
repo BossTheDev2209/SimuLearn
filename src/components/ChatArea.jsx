@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
-export default function ChatArea({ messages, onSendMessage, setIsInteracting }) {
+export default function ChatArea({ messages, onSendMessage, setIsInteracting, isLoading }) {
   const [inputText, setInputText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   
   // Use a derived boolean or state to track if we've sent anything yet.
-  const hasSentMessage = messages.length > 0;
+  const hasSentMessage = messages.length > 0 || isLoading;
   
   // The input elevates when focused, has text, or a message has been sent.
   const isActive = isFocused || inputText.length > 0 || hasSentMessage;
@@ -15,7 +15,7 @@ export default function ChatArea({ messages, onSendMessage, setIsInteracting }) 
   }, [isActive, setIsInteracting]);
 
   const handleSend = () => {
-    if (!inputText.trim() || hasSentMessage) return;
+    if (!inputText.trim() || isLoading) return;
     onSendMessage(inputText);
     setInputText('');
   };

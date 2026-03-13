@@ -58,8 +58,19 @@ export function useControlPanelState(initialState, simulationType, onUpdate) {
       };
       setObjects((prev) => [...prev, newObj]); setObjectCounter((prev) => prev + 1);
     },
-    clearAll: () => setObjects([]),
+    removeObject: (objId) => setObjects((prev) => prev.filter((o) => o.id !== objId)),
+    clearAll: () => { setObjects([]); setObjectCounter(0); },
     updateObjectValues: (objId, newValues) => setObjects((prev) => prev.map((o) => (o.id === objId ? { ...o, values: { ...o.values, ...newValues } } : o))),
+    resetState: (newState) => {
+      if (newState.objects) {
+        setObjects(newState.objects);
+        setObjectCounter(newState.objects.length);
+      }
+      if (newState.gravity !== undefined) setGravity(newState.gravity);
+      if (newState.airResistance !== undefined) setAirResistance(newState.airResistance);
+      if (newState.groundFriction !== undefined) setGroundFriction(newState.groundFriction);
+      // ... sync other settings as needed
+    }
   };
 
   return {

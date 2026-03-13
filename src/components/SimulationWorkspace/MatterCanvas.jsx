@@ -414,7 +414,11 @@ const MatterCanvas = forwardRef(({ size, offset, zoom, unitStep, simState, initi
       }
     };
     raf = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(raf); Matter.Engine.clear(engine); };
+    return () => { 
+      cancelAnimationFrame(raf); 
+      Matter.Engine.clear(engine);
+      Matter.Composite.clear(engine.world, false); // Clear bodies specifically
+    };
   }, [engineResetToken]);
 
   // Sync simState -> Engine

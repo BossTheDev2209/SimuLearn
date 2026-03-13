@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export function useTimeManagement(simState, setSimState, onSaveControlState, matterCanvasRef) {
+export function useTimeManagement(simState, setSimState, onSaveControlState, matterCanvasRef, controlPanelRef) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStartedOnce, setHasStartedOnce] = useState(false);
   const [timeScale, setTimeScale] = useState(1);
@@ -59,6 +59,10 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
       const restored = snapshotRef.current.simState;
       setSimState(restored);
       if (onSaveControlState) onSaveControlState(restored);
+      // 🌟 Sync ControlPanel
+      if (controlPanelRef?.current?.resetState) {
+        controlPanelRef.current.resetState(restored);
+      }
     }
     if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
   }, [setSimState, onSaveControlState, matterCanvasRef]);
