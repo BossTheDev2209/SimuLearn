@@ -31,11 +31,16 @@ export const createGround = () => {
 export const updatePhysics = (engine, dt, state, bodyMap, maxTime, timeState, setIsPlaying) => {
   if (!timeState.isPlaying) return;
 
-  // 1. Hard Stop Logic
+  // 1. Hard Stop Logic (Absolute)
   if (timeState.time >= (maxTime || Infinity)) {
     timeState.time = maxTime;
     timeState.isPlaying = false;
     setIsPlaying(false);
+    
+    // Force absolute stop: set all non-static velocities to zero
+    Matter.Composite.allBodies(engine.world).forEach(body => {
+      if (!body.isStatic) Matter.Body.setVelocity(body, { x: 0, y: 0 });
+    });
     return;
   }
 
@@ -69,7 +74,7 @@ export const updatePhysics = (engine, dt, state, bodyMap, maxTime, timeState, se
   }
 
   // 3. System Update
-  Matter.Engine.update(engine, dt * 1000); // Matter.js uses ms
+  Matter.Engine.update(engine, dt * 1000); 
   timeState.time += dt;
 
   // 4. Auto-stop if energy vanishes
@@ -82,4 +87,37 @@ export const updatePhysics = (engine, dt, state, bodyMap, maxTime, timeState, se
     timeState.isPlaying = false;
     setIsPlaying(false);
   }
+};
+
+/**
+ * Predicts the time till simulation ends based on kinematics (s = ut + 0.5at^2).
+ */
+export const predictSimulationTime = (simState) => {
+  if (!simState || !simState.objects) return 10.0;
+  const g = (simState.gravity || 9.8) / 10; // Scaled for Matter.js
+  let maxT = 0;
+
+  simState.objects.forEach(obj => {
+    if (!obj.isSpawned) return;
+    
+    const radius = (obj.shape === 'circle' ? obj.size : obj.size / 2) || 0.5;
+    const h = (obj.position?.y || 0) - radius;
+    if (h <= 0) return;
+
+    // Get initial vertical velocity (u)
+    let uy = 0;
+    const vels = [...(obj.values?.velocities || [])];
+    if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
+    
+    vels.forEach(v => {
+      uy += v.magnitude * Math.sin((v.angle * Math.PI) / 180) * 0.1; // Scale factor matching physics
+    });
+
+    // Solve for t: 0 = h + uy*t - 0.5*g*t^2  => 0.5*g*t^2 - uy*t - h = 0
+    // t = (uy + sqrt(uy^2 + 2*g*h)) / g
+    const t = (uy + Math.sqrt(uy * uy + 2 * g * h)) / g;
+    if (t > maxT) maxT = t;
+  });
+
+  return Math.min(Math.max(maxT + 1.5, 5), 30); // Buffer and clamps
 };

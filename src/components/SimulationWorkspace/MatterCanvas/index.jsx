@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, memo } from 'react';
 import Matter from 'matter-js';
 import { PIXELS_PER_METER, renderObjectVectors, drawArrow } from './VectorRenderer';
-import { createPhysicsEngine, createGround, updatePhysics } from './PhysicsEngine';
+import { createPhysicsEngine, createGround, updatePhysics, predictSimulationTime } from './PhysicsEngine';
 
 const MatterCanvas = forwardRef(({ 
   size, offset, zoom, unitStep, simState, onPhysicsChange, 
@@ -82,7 +82,7 @@ const MatterCanvas = forwardRef(({
       return null;
     },
     predictSimulationTime: () => {
-      return 10.0; // Basic implementation or calculate based on gravity/height
+      return predictSimulationTime(simState);
     },
     findSnapPoint: (wx, wy) => {
       const engine = engineRef.current;

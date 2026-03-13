@@ -14,19 +14,17 @@ export const useZoomLogic = (
   onGridClick,
   unitStep
 ) => {
-  const [offset, setOffset] = useState(initialCamera?.offset || { x: 0, y: 0 });
-  const [zoom, setZoom] = useState(initialCamera?.zoom || 1);
+  const [camera, setCamera] = useState({
+    offset: initialCamera?.offset || { x: 0, y: 0 },
+    zoom: initialCamera?.zoom || 1
+  });
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [isDragging, setIsDragging] = useState(false);
   
   const dragging = useRef(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-  const offsetStart = useRef({ x: 0, y: 0 });
+  const dragStartWorld = useRef({ wx: 0, wy: 0 });
 
   const PIXELS_PER_METER = 100;
-  const pxPerUnit = PIXELS_PER_METER * zoom;
-  const ox = size.w / 2 + offset.x;
-  const oy = size.h / 2 + offset.y;
 
   // Handle Resize
   useEffect(() => {
@@ -40,8 +38,8 @@ export const useZoomLogic = (
     return () => ro.disconnect();
   }, [containerRef]);
 
-  // Screen -> World conversion
-  const getSimCoords = useCallback((e) => {
+  // Screen -> World conversion (Absolute)
+  const getSimCoordsLocal = useCallback((e, currentOffset, currentZoom, currentSize) => {
     const el = containerRef.current;
     if (!el) return { wx: 0, wy: 0 };
     const rect = el.getBoundingClientRect();
@@ -49,10 +47,14 @@ export const useZoomLogic = (
     const screenY = e.clientY - rect.top;
     
     return {
-      wx: (screenX - (size.w / 2 + offset.x)) / (PIXELS_PER_METER * zoom),
-      wy: ((size.h / 2 + offset.y) - screenY) / (PIXELS_PER_METER * zoom)
+      wx: (screenX - (currentSize.w / 2 + currentOffset.x)) / (PIXELS_PER_METER * currentZoom),
+      wy: ((currentSize.h / 2 + currentOffset.y) - screenY) / (PIXELS_PER_METER * currentZoom)
     };
-  }, [offset, zoom, size, containerRef]);
+  }, [containerRef]);
+
+  const getSimCoords = useCallback((e) => {
+    return getSimCoordsLocal(e, camera.offset, camera.zoom, size);
+  }, [camera, size, getSimCoordsLocal]);
 
   const handlePointerDown = useCallback((e) => {
     if (e.button !== 0) return;
@@ -66,31 +68,38 @@ export const useZoomLogic = (
     if (activeTool === 'cursor' || !consumed) {
       dragging.current = true;
       setIsDragging(true);
-      dragStart.current = { x: e.clientX, y: e.clientY };
-      offsetStart.current = { ...offset };
+      dragStartWorld.current = coords; // Capture world point under cursor
       e.currentTarget.setPointerCapture(e.pointerId);
     }
-  }, [getSimCoords, onGridPointerDown, unitStep, activeTool, offset]);
+  }, [getSimCoords, onGridPointerDown, unitStep, activeTool]);
 
   const handlePointerMove = useCallback((e) => {
+    const coords = getSimCoords(e);
     if (onGridPointerMove) {
-      const coords = getSimCoords(e);
       onGridPointerMove(coords.wx, coords.wy, e, unitStep);
     }
     
     if (!dragging.current) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    
-    setOffset({
-      x: offsetStart.current.x + dx,
-      y: offsetStart.current.y + dy,
-    });
-  }, [getSimCoords, onGridPointerMove, unitStep]);
+
+    // Recalculate offset to keep dragStartWorld under current cursor position
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    setCamera(prev => ({
+      ...prev,
+      offset: {
+        x: mx - size.w / 2 - dragStartWorld.current.wx * (PIXELS_PER_METER * prev.zoom),
+        y: size.h / 2 - my + dragStartWorld.current.wy * (PIXELS_PER_METER * prev.zoom)
+      }
+    }));
+  }, [getSimCoords, onGridPointerMove, unitStep, size, containerRef]);
 
   const handlePointerUp = useCallback((e) => {
+    const coords = getSimCoords(e);
     if (onGridPointerUp) {
-      const coords = getSimCoords(e);
       onGridPointerUp(coords.wx, coords.wy, e, unitStep);
     }
     
@@ -102,12 +111,12 @@ export const useZoomLogic = (
         e.currentTarget.releasePointerCapture(e.pointerId);
     }
     
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    // Use world-space distance check instead of screen pixels for tool click
+    const dx = coords.wx - dragStartWorld.current.wx;
+    const dy = coords.wy - dragStartWorld.current.wy;
+    const distW = Math.sqrt(dx * dx + dy * dy);
     
-    if (activeTool !== 'cursor' || dist < 5) {
-      const coords = getSimCoords(e);
+    if (activeTool !== 'cursor' || distW < 0.1) {
       if (onGridClick) onGridClick(coords.wx, coords.wy, unitStep);
     }
   }, [getSimCoords, onGridPointerUp, activeTool, onGridClick, unitStep]);
@@ -118,26 +127,29 @@ export const useZoomLogic = (
     if (!el) return;
     
     const rect = el.getBoundingClientRect();
-    // Use precise relative position for anchored zoom (Fixes Vertical Drift)
     const mx = e.clientX - rect.left - size.w / 2;
     const my = e.clientY - rect.top - size.h / 2;
     
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    const newZoom = Math.min(Math.max(zoom * factor, 0.05), 50);
-
-    setOffset((prev) => ({
-      x: mx - (mx - prev.x) * (newZoom / zoom),
-      y: my - (my - prev.y) * (newZoom / zoom),
-    }));
-    setZoom(newZoom);
-  }, [zoom, size, containerRef]);
+    
+    setCamera(prev => {
+      const newZoom = Math.min(Math.max(prev.zoom * factor, 0.05), 50);
+      return {
+        zoom: newZoom,
+        offset: {
+          x: mx - (mx - prev.offset.x) * (newZoom / prev.zoom),
+          y: my - (my - prev.offset.y) * (newZoom / prev.zoom)
+        }
+      };
+    });
+  }, [size, containerRef]);
 
   useEffect(() => {
-    if (onCameraChange) onCameraChange({ offset, zoom });
-  }, [offset, zoom, onCameraChange]);
+    if (onCameraChange) onCameraChange(camera);
+  }, [camera, onCameraChange]);
 
   return { 
-    offset, zoom, size, isDragging, 
+    offset: camera.offset, zoom: camera.zoom, size, isDragging, 
     handlePointerDown, handlePointerMove, handlePointerUp, handleWheel, 
     getSimCoords 
   };
