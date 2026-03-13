@@ -98,58 +98,52 @@ function App() {
             return;
           }
 
-          // 🌟 Deduplicate by ID to prevent UI glitches (double items)
-          const uniqueItems = [];
+          // 🌟 Robust Deduplication by ID
           const seenIds = new Set();
-          apiHistory.forEach(item => {
-            const id = (item?.id || item?._id || "").toString();
-            if (id && !seenIds.has(id)) {
+          const formattedSimulations = apiHistory
+            .map((item) => {
+              const id = (item?.id || item?._id || "").toString();
+              if (!id || seenIds.has(id)) return null;
               seenIds.add(id);
-              uniqueItems.push(item);
-            }
-          });
 
-          const formattedSimulations = uniqueItems.map((item) => {
-            const simType = item?.type || item?.topic_type || 'free_fall';
-            let parsedData = null;
-            try {
-              if (item?.data?.objects) {
-                parsedData = item.data; 
-              } else {
-                const template = getSimulationTemplate(simType);
-                const rawVariables = item?.calculated_variables || item?.data?.variables || {};
-                parsedData = {
-                  simulationType: simType,
-                  ai_description: item?.ai_description || item?.data?.description || "",
-                  ...(template?.parseData(rawVariables) ?? {})
-                };
+              const simType = item?.type || item?.topic_type || 'free_fall';
+              let parsedData = null;
+              try {
+                if (item?.data?.objects) {
+                  parsedData = item.data; 
+                } else {
+                  const template = getSimulationTemplate(simType);
+                  const rawVariables = item?.calculated_variables || item?.data?.variables || {};
+                  parsedData = {
+                    simulationType: simType,
+                    ai_description: item?.ai_description || item?.data?.description || "",
+                    ...(template?.parseData(rawVariables) ?? {})
+                  };
+                }
+              } catch (parseErr) {
+                console.warn("parse item failed, skipping data:", id, parseErr);
+                return null;
               }
-            } catch (parseErr) {
-              console.warn("parse item failed, skipping data:", item?.id || item?._id, parseErr);
-              parsedData = null;
-            }
 
-            return {
-              id: item?.id || item?._id,
-              title: item?.title || "แบบจำลองของฉัน",
-              userId: item?.userId,
-              createdAt: item?.createdAt?._seconds ? new Date(item.createdAt._seconds * 1000) : new Date(item?.createdAt || Date.now()),
-              data: parsedData,
-              physicsState: item?.physicsState || null,
-              controlState: item?.controlState || null
-            };
-          });
+              return {
+                id,
+                title: item?.title || "แบบจำลองของฉัน",
+                userId: item?.userId,
+                createdAt: item?.createdAt?._seconds ? new Date(item.createdAt._seconds * 1000) : new Date(item?.createdAt || Date.now()),
+                data: parsedData,
+                physicsState: item?.physicsState || null,
+                controlState: item?.controlState || null
+              };
+            })
+            .filter(Boolean);
 
           formattedSimulations.sort((a, b) => b.createdAt - a.createdAt);
           
-          // 🌟 Replace entire list with sorted, unique ones to prevent duplicates upon refresh
           setSimulations(formattedSimulations);
         } catch (err) {
           console.error("โหลดประวัติจาก API ไม่ขึ้น:", err);
-          // 🌟 สำหรับ History เราจะไม่บล็อกหน้าจอ (ไม่ setApiError) 
-          // เพื่อให้ User ยังเข้าหน้าหลักได้ แม้เซิร์ฟเวอร์จะยังไม่ตื่น
         } finally {
-          setIsHistoryLoading(false); //
+          setIsHistoryLoading(false);
         }
 
         // Fetch Preferences
@@ -314,12 +308,12 @@ function App() {
         ...template.parseData(rawVariables)
       };
 
-      const finalId = apiData.id ? apiData.id.toString() : newSimId;
+      const finalId = (apiData.id || apiData._id || newSimId).toString();
 
-      if (!apiData.id) {
-         // Backend did not save to DB, so Frontend handles it
+      if (!apiData.id && !myUserId.startsWith("guest_")) {
+         // Backend did not save to DB (and not guest), so Frontend handles it
          await setDoc(doc(db, "simulations", finalId), {
-           title: text,
+           title: apiData.title || text,
            userId: myUserId,
            data: formattedData,
            createdAt: serverTimestamp()
@@ -327,7 +321,8 @@ function App() {
       }
 
       setSimulations((prev) => {
-         const filtered = prev.filter(s => s.id !== newSimId);
+         // 🌟 CRITICAL: Filter out BOTH the temp ID and the final ID to prevent race conditions
+         const filtered = prev.filter(s => s.id !== newSimId && s.id !== finalId);
          return [
             { 
                id: finalId, 
