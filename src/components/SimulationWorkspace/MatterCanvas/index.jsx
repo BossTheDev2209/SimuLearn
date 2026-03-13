@@ -33,6 +33,57 @@ const MatterCanvas = forwardRef(({
       pendingActionRef.current = pendingAction || null;
       setEngineResetToken(prev => prev + 1);
     },
+    // Required for handleGridClick and erasing vectors
+    findVectorAt: (wx, wy) => {
+      if (!simState?.objects) return null;
+      const HIT_RADIUS = 0.5; // Meters
+
+      for (const obj of simState.objects) {
+        if (!obj.isSpawned) continue;
+        const body = bodyMap.current.get(obj.id);
+        if (!body) continue;
+
+        const bx = body.position.x;
+        const by = body.position.y;
+
+        // Check velocities
+        const vels = [...(obj.values?.velocities || [])];
+        if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0, isLegacy: true });
+
+        for (let i = 0; i < vels.length; i++) {
+          const v = vels[i];
+          const vx = v.magnitude * Math.cos((v.angle * Math.PI) / 180) * 0.2;
+          const vy = v.magnitude * Math.sin((v.angle * Math.PI) / 180) * 0.2;
+          
+          // Check proximity to arrow head (approximate)
+          const headX = bx + vx, headY = by + vy;
+          const dist = Math.sqrt((wx - headX) ** 2 + (wy - headY) ** 2);
+          if (dist < HIT_RADIUS) {
+            return { objId: obj.id, type: 'velocity', index: v.isLegacy ? null : i, isLegacy: !!v.isLegacy };
+          }
+        }
+
+        // Check forces
+        const forces = [...(obj.values?.forces || [])];
+        if (obj.values?.force) forces.push({ magnitude: obj.values.force, angle: obj.values.forceAngle || 0, isLegacy: true });
+
+        for (let i = 0; i < forces.length; i++) {
+          const f = forces[i];
+          const fx = f.magnitude * Math.cos((f.angle * Math.PI) / 180) * 0.2;
+          const fy = f.magnitude * Math.sin((f.angle * Math.PI) / 180) * 0.2;
+          
+          const headX = bx + fx, headY = by + fy;
+          const dist = Math.sqrt((wx - headX) ** 2 + (wy - headY) ** 2);
+          if (dist < HIT_RADIUS) {
+            return { objId: obj.id, type: 'force', index: f.isLegacy ? null : i, isLegacy: !!f.isLegacy };
+          }
+        }
+      }
+      return null;
+    },
+    predictSimulationTime: () => {
+      return 10.0; // Basic implementation or calculate based on gravity/height
+    },
     findSnapPoint: (wx, wy) => {
       const engine = engineRef.current;
       if (!engine) return null;
