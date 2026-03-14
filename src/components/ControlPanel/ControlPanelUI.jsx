@@ -1,17 +1,47 @@
 import React, { memo } from 'react';
 import ObjectAppearancePicker from '../ObjectAppearancePicker';
 
-export const SliderRow = memo(({ label, unit, value, min, max, step, onChange, disabled }) => (
-  <div className={`mb-3 transition-opacity ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
-    <div className="flex items-baseline justify-between mb-1">
-      <span className={`text-[13px] font-medium leading-tight ${disabled ? 'text-theme-muted' : 'text-theme-primary'}`}>{label}</span>
-      <span className={`text-[13px] font-bold ml-2 whitespace-nowrap ${disabled ? 'text-theme-muted' : 'text-[#FFB65A] dark:text-[#FFB65A]'}`}>
-        {value} <span className="text-theme-muted font-normal text-[11px] ml-0.5">{unit}</span>
-      </span>
+export const SliderRow = memo(({ label, unit, value, min, max, step, onChange, disabled }) => {
+  const [localValue, setLocalValue] = React.useState(null);
+
+  // Sync state if external value changes (and user is not currently editing)
+  const displayValue = localValue !== null ? localValue : (typeof value === 'number' ? Math.round(value * 100) / 100 : value);
+
+  const handleCommit = () => {
+    if (localValue === null) return;
+    let num = parseFloat(localValue);
+    if (isNaN(num)) {
+      setLocalValue(null);
+      return;
+    }
+    // Clamp: "ถ้าทะลุ limit ให้ดึงมาเป็นค่าต่ำสุด/มากสุดแทน"
+    const clamped = Math.max(min, Math.min(max, num));
+    onChange(clamped);
+    setLocalValue(null);
+  };
+
+  return (
+    <div className={`mb-3 transition-opacity ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+      <div className="flex items-baseline justify-between mb-1">
+        <span className={`text-[13px] font-medium leading-tight ${disabled ? 'text-theme-muted' : 'text-theme-primary'}`}>{label}</span>
+        <div className="flex items-center gap-0.5">
+          <input 
+            type="text"
+            className={`w-16 bg-transparent text-[13px] font-bold text-right outline-none rounded focus:bg-white/5 px-1 ${disabled ? 'text-theme-muted' : 'text-[#FFB65A]'}`}
+            value={displayValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            onBlur={handleCommit}
+            onKeyDown={(e) => e.key === 'Enter' && handleCommit()}
+            disabled={disabled}
+            title={`ป้อนค่าระหว่าง ${min} ถึง ${max}`}
+          />
+          <span className="text-theme-muted font-normal text-[11px] ml-0.5">{unit}</span>
+        </div>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className={`control-slider w-full accent-[#FFB65A] ${disabled ? 'grayscale' : ''}`} disabled={disabled} />
     </div>
-    <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className={`control-slider w-full accent-[#FFB65A] ${disabled ? 'grayscale' : ''}`} disabled={disabled} />
-  </div>
-));
+  );
+});
 
 export const ToggleRow = memo(({ label, checked, onChange, disabled }) => (
   <label className={`flex items-center justify-between py-2 transition-opacity ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer group'}`}>

@@ -171,6 +171,56 @@ const MatterCanvas = forwardRef(({
       if (controlPanelRef.current?.updateObjectValues) {
         controlPanelRef.current.updateObjectValues(id, { height: wy });
       }
+    },
+
+    findRotationHandle: (wx, wy) => {
+      if (activeTool !== 'cursor' || !selectedObjectId) return null;
+      const body = bodyMap.current.get(selectedObjectId);
+      if (!body || body.label === 'circle') return null;
+
+      const wp = matterToWorld(body.position.x, body.position.y);
+      const radiusM = (body.plugin?.size || 1) / 2;
+      const handleDist = radiusM + 0.5;
+      
+      // Handle position in world coords
+      const hx = wp.x + handleDist * Math.cos(body.angle - Math.PI/2);
+      const hy = wp.y - handleDist * Math.sin(body.angle - Math.PI/2);
+
+      const d = Math.sqrt((wx - hx)**2 + (wy - hy)**2);
+      if (d < 0.4) return selectedObjectId;
+      return null;
+    },
+
+    checkCollision: (wx, wy, size, shape) => {
+      const engine = engineRef.current;
+      if (!engine) return false;
+      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground');
+      const { x: px, y: py } = worldToMatter(wx, wy);
+      const radiusPx = (size * PIXELS_PER_METER) / 2;
+      
+      let tempBody;
+      if (shape === 'circle') {
+        tempBody = Matter.Bodies.circle(px, py, radiusPx);
+      } else if (shape === 'polygon-3') {
+        // We use circumcircle radius for polygon check
+        tempBody = Matter.Bodies.polygon(px, py, 3, radiusPx / (Math.sqrt(3)/2));
+      } else {
+        tempBody = Matter.Bodies.rectangle(px, py, radiusPx * 2, radiusPx * 2);
+      }
+      
+      const collisions = Matter.Query.collides(tempBody, bodies);
+      return collisions.length > 0;
+    },
+
+    setObjectRotation: (id, angleRad) => {
+      const body = bodyMap.current.get(id);
+      if (!body) return;
+      Matter.Body.setAngle(body, angleRad);
+      if (controlPanelRef.current?.updateObjectValues) {
+        // We might want to store angle in degrees for the UI
+        const deg = Math.round((angleRad * 180 / Math.PI) * 10) / 10;
+        controlPanelRef.current.updateObjectValues(id, { angle: deg });
+      }
     }
   }));
 
@@ -243,7 +293,7 @@ const MatterCanvas = forwardRef(({
         const {
           size, offset, zoom,
           showCursorCoords, showResultantVector,
-          gridSnapping, unitStep,
+          gridSnapping, unitStep, activeTool, spawnConfig
         } = loopPropsRef.current;
 
         ctx.clearRect(0, 0, size.w, size.h);
@@ -327,6 +377,37 @@ const MatterCanvas = forwardRef(({
             ctx.strokeStyle = '#4ADE80'; // Green highlight
             ctx.lineWidth = 3;
             ctx.stroke();
+
+            // Rotation Handle
+            if (body.label !== 'circle') {
+              const radiusM = (body.plugin?.size || 1) / 2;
+              const handleDist = radiusM + 0.5;
+              const hWorld = {
+                x: worldPos.x + handleDist * Math.cos(body.angle - Math.PI/2),
+                y: worldPos.y - handleDist * Math.sin(body.angle - Math.PI/2)
+              };
+              const hScreen = toScreen(hWorld.x, hWorld.y);
+
+              // Line to handle
+              ctx.beginPath();
+              const cScreen = toScreen(worldPos.x, worldPos.y);
+              ctx.moveTo(cScreen.x, cScreen.y);
+              ctx.lineTo(hScreen.x, hScreen.y);
+              ctx.strokeStyle = '#FFB65A';
+              ctx.setLineDash([2, 2]);
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              // The handle
+              ctx.beginPath();
+              ctx.arc(hScreen.x, hScreen.y, 8, 0, 2 * Math.PI);
+              ctx.fillStyle = '#FFB65A';
+              ctx.fill();
+              ctx.strokeStyle = '#FFFFFF';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            }
           }
         });
 
@@ -345,7 +426,7 @@ const MatterCanvas = forwardRef(({
 
         // Grid snap dot
         if (gridSnapping && mouseRef.current.x > -1000) {
-          const us = (unitStep || 1) / 5;
+          const us = unitStep || 1;
           const wx = Math.round(((mouseRef.current.x - ox) / PPM_ZOOMED) / us) * us;
           const wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
           const s = toScreen(wx, wy);
@@ -363,6 +444,36 @@ const MatterCanvas = forwardRef(({
           ctx.fillRect(mouseRef.current.x + 15, mouseRef.current.y + 15, ctx.measureText(text).width + 10, 20);
           ctx.fillStyle = '#fff';
           ctx.fillText(text, mouseRef.current.x + 20, mouseRef.current.y + 30);
+        }
+
+        // Hologram Preview (Add Tool)
+        if (activeTool === 'add' && spawnConfig && mouseRef.current.x > -1000) {
+          const us = unitStep || 1;
+          const wx = Math.round(((mouseRef.current.x - ox) / PPM_ZOOMED) / us) * us;
+          const wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
+          const s = toScreen(wx, wy);
+          const radiusPx = (spawnConfig.size * PIXELS_PER_METER * zoom) / 2;
+
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          if (spawnConfig.shape === 'circle') {
+            ctx.arc(s.x, s.y, radiusPx, 0, 2 * Math.PI);
+          } else if (spawnConfig.shape === 'polygon-3') {
+             // Simplified triangle for hologram
+             ctx.moveTo(s.x, s.y - radiusPx);
+             ctx.lineTo(s.x + radiusPx, s.y + radiusPx);
+             ctx.lineTo(s.x - radiusPx, s.y + radiusPx);
+          } else {
+            ctx.rect(s.x - radiusPx, s.y - radiusPx, radiusPx * 2, radiusPx * 2);
+          }
+          ctx.closePath();
+          ctx.fillStyle = spawnConfig.color || '#FFB65A';
+          ctx.fill();
+          ctx.strokeStyle = spawnConfig.color || '#FFB65A';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
         }
       }
 

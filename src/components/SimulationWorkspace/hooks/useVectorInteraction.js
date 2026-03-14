@@ -10,7 +10,8 @@ export const useVectorInteraction = ({
   followedObjectId,
   setFollowedObjectId,
   selectedObjectId,
-  setSelectedObjectId
+  setSelectedObjectId,
+  bodiesRef
 }) => {
   const dragRef = useRef(null);
 
@@ -29,6 +30,12 @@ export const useVectorInteraction = ({
     }
 
     if (activeTool === 'cursor') {
+      const rotId = matterCanvasRef.current?.findRotationHandle(wx, wy);
+      if (rotId) {
+        dragRef.current = { objId: rotId, isRotating: true, hasMoved: false };
+        return true;
+      }
+
       const hitId = matterCanvasRef.current?.findObjectAt(wx, wy);
       if (hitId) {
         // Start dragging
@@ -58,16 +65,26 @@ export const useVectorInteraction = ({
       }
       matterCanvasRef.current?.moveVectorDrag(nx, ny);
     } else if (activeTool === 'cursor' && dragRef.current) {
-      const d = dragRef.current;
-      d.hasMoved = true;
-      let nx = wx, ny = wy;
-      if (simState?.gridSnapping) {
-        nx = Math.round(wx / unitStep) * unitStep;
-        ny = Math.round(wy / unitStep) * unitStep;
+      if (dragRef.current.isRotating) {
+        const body = bodiesRef.current?.[dragRef.current.objId];
+        if (body) {
+          const dx = wx - body.position.x;
+          const dy = wy - body.position.y;
+          const angle = Math.atan2(dy, dx) + Math.PI/2;
+          matterCanvasRef.current?.setObjectRotation(dragRef.current.objId, -angle);
+          dragRef.current.hasMoved = true;
+        }
+      } else {
+        let nx = wx, ny = wy;
+        if (simState?.gridSnapping) {
+          nx = Math.round(wx / unitStep) * unitStep;
+          ny = Math.round(wy / unitStep) * unitStep;
+        }
+        matterCanvasRef.current?.teleportObject(dragRef.current.objId, nx, ny);
+        dragRef.current.hasMoved = true;
       }
-      matterCanvasRef.current?.teleportObject(d.objId, nx, ny);
     }
-  }, [activeTool, simState?.gridSnapping, matterCanvasRef]);
+  }, [activeTool, simState?.gridSnapping, matterCanvasRef, bodiesRef]);
 
   const handleGridPointerUp = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {

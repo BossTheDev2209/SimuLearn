@@ -68,7 +68,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
   const { handleGridPointerDown, handleGridPointerMove, handleGridPointerUp } = useVectorInteraction({
     activeTool, simState, matterCanvasRef, pushToHistory, controlPanelRef, 
     setVectorEditor, followedObjectId, setFollowedObjectId,
-    selectedObjectId, setSelectedObjectId
+    selectedObjectId, setSelectedObjectId, bodiesRef
   });
 
   // Imperative Handle

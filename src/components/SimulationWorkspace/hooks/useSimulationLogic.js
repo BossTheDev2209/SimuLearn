@@ -64,7 +64,15 @@ export const useSimulationLogic = ({
       const fx = snapped ? Math.round(wx / unitStep) * unitStep : wx;
       const fy = snapped ? Math.round(wy / unitStep) * unitStep : wy;
 
-      const overlapRadiusBase = 1.1;
+      // 1. Precise check using Matter.js engine
+      const preciseHit = matterCanvasRef.current?.checkCollision(fx, fy, spawnConfig.size, spawnConfig.shape);
+      if (preciseHit) {
+        showToast('ไม่สามารถเสกวัตถุตรงนี้ได้');
+        return;
+      }
+
+      // 2. Fallback distance check
+      const overlapRadiusBase = 0.52; 
       const requiredRadius = spawnConfig.size * overlapRadiusBase;
 
       const currentObjects = simState?.objects || [];

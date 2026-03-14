@@ -17,9 +17,14 @@ export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport
       const screenX = (body.position.x * PPM_ZOOMED) + (size.w / 2 + offset.x);
       const screenY = (size.h / 2 + offset.y) - (body.position.y * PPM_ZOOMED);
 
+      // คำนวณรัศมีในหน่วยพิกเซล (Screen Pixels)
+      const radiusPx = ((obj.size || 1) * PPM_ZOOMED) / 2;
+
+      // ปรับเงื่อนไข: จะโชว์ indicator ก็ต่อเมื่อ "ทั้งวัตถุ" (รวมรัศมี) หลุดออกไปแล้วเท่านั้น
       const isOffScreen =
-        screenX < margin || screenX > size.w - margin ||
-        screenY < margin || screenY > size.h - margin;
+        screenX + radiusPx < 0 || screenX - radiusPx > size.w ||
+        screenY + radiusPx < 0 || screenY - radiusPx > size.h;
+      
       if (!isOffScreen) return;
 
       indicators.push({
