@@ -488,6 +488,38 @@ const MatterCanvas = forwardRef(({
         ctx.restore();
       }
 
+      // Vector hover highlight for cursor and erase tools
+      if ((activeTool === 'erase' || activeTool === 'cursor') && mouseRef.current.x > -1000) {
+        const wx = (mouseRef.current.x - ox) / PPM_ZOOMED;
+        const wy = (oy - mouseRef.current.y) / PPM_ZOOMED;
+        const SCALE = 0.05; // same as findVectorAt
+
+        for (const obj of (loopSimState?.objects || [])) {
+          if (!obj.isSpawned) continue;
+          const body = bodyMap.current.get(obj.id);
+          if (!body) continue;
+          const wp = matterToWorld(body.position.x, body.position.y);
+
+          const allVecs = [
+            ...(obj.values?.velocities || []).map(v => ({ ...v, vtype: 'velocity' })),
+            ...(obj.values?.forces || []).map(f => ({ ...f, vtype: 'force' })),
+          ];
+
+          for (const v of allVecs) {
+            const angleRad = (v.angle * Math.PI) / 180;
+            const hx = wp.x + v.magnitude * Math.cos(angleRad) * SCALE;
+            const hy = wp.y + v.magnitude * Math.sin(angleRad) * SCALE;
+            
+            if (pointToSegmentDistance(wx, wy, wp.x, wp.y, hx, hy) < 0.3) {
+              // Draw highlighted version
+              const color = v.vtype === 'velocity' ? '#3B82F6' : '#EF4444';
+              drawArrow(ctx, toScreen, wp.x, wp.y, hx, hy, color, 5, 1.0);
+              break;
+            }
+          }
+        }
+      }
+
       raf = requestAnimationFrame(loop);
     };
 

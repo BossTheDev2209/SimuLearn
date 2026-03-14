@@ -11,10 +11,16 @@ const CheckIcon = () => <svg width="10" height="10" viewBox="0 0 24 24" fill="no
 export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue }) => {
   const [localState, setLocalState] = useState(null);
   const [showSaved, setShowSaved] = useState(false);
+  
+  // Local string states for inputs to avoid numeric "stuck" behavior
+  const [magInput, setMagInput] = useState('');
+  const [angleInput, setAngleInput] = useState('');
 
   useEffect(() => {
     if (vectorEditor) {
       setLocalState({ ...vectorEditor });
+      setMagInput(String(vectorEditor.magnitude));
+      setAngleInput(String(vectorEditor.angle));
     }
   }, [vectorEditor]);
 
@@ -35,6 +41,18 @@ export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue
     
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 1000);
+  };
+
+  const commitMag = () => {
+    const val = parseFloat(magInput);
+    if (!isNaN(val)) handleUpdate({ magnitude: val });
+    else setMagInput(String(data.magnitude));
+  };
+
+  const commitAngle = () => {
+    const val = parseFloat(angleInput);
+    if (!isNaN(val)) handleUpdate({ angle: val });
+    else setAngleInput(String(data.angle));
   };
 
   const accentColor = data.type === 'velocity' ? '#3B82F6' : '#EF4444';
@@ -66,9 +84,9 @@ export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue
             <div className="text-gray-400 opacity-60"><EditIcon /></div>
             <input 
               className="bg-transparent text-[11px] font-bold text-theme-primary outline-none w-14"
-              value={localState.name || ''}
+              value={data.name || ''}
               onChange={(e) => handleUpdate({ name: e.target.value })}
-              onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); e.stopPropagation(); }}
               onPointerDown={stopAll}
             />
           </div>
@@ -90,23 +108,25 @@ export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue
           <div className="flex-1 flex items-center gap-1.5 bg-gray-100 dark:bg-white/5 rounded-lg px-2 py-1.5">
             <div className="text-gray-400"><MagIcon /></div>
             <input 
-              type="number"
+              type="text"
               className="w-full bg-transparent text-[12px] font-bold text-theme-primary outline-none"
-              value={localState.magnitude}
-              onChange={(e) => handleUpdate({ magnitude: Number(e.target.value) })}
-              onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+              value={magInput}
+              onChange={(e) => setMagInput(e.target.value)}
+              onBlur={commitMag}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); e.stopPropagation(); }}
               onPointerDown={stopAll}
             />
-            <span className="text-[9px] font-bold text-gray-400">{localState.type === 'velocity' ? 'm/s' : 'N'}</span>
+            <span className="text-[9px] font-bold text-gray-400">{data.type === 'velocity' ? 'm/s' : 'N'}</span>
           </div>
           <div className="flex-1 flex items-center gap-1.5 bg-gray-100 dark:bg-white/5 rounded-lg px-2 py-1.5">
             <div className="text-gray-400"><AngleIcon /></div>
             <input 
-              type="number"
+              type="text"
               className="w-full bg-transparent text-[12px] font-bold text-theme-primary outline-none"
-              value={localState.angle}
-              onChange={(e) => handleUpdate({ angle: Number(e.target.value) })}
-              onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+              value={angleInput}
+              onChange={(e) => setAngleInput(e.target.value)}
+              onBlur={commitAngle}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); e.stopPropagation(); }}
               onPointerDown={stopAll}
             />
             <span className="text-[9px] font-bold text-gray-400">°</span>

@@ -40,11 +40,7 @@ export const useVectorInteraction = ({
 
       const vHit = matterCanvasRef.current?.findVectorAt(wx, wy);
       if (vHit && vHit.index !== 'resultant' && vHit.index !== 'netResultant') {
-        setVectorEditor({
-          ...vHit,
-          screenX: e.clientX,
-          screenY: e.clientY
-        });
+        dragRef.current = { isVectorHit: true, vHit, startX: wx, startY: wy, hasMoved: false };
         return true;
       }
 
@@ -94,25 +90,27 @@ export const useVectorInteraction = ({
       matterCanvasRef.current?.moveVectorDrag(nx, ny);
 
     } else if (activeTool === 'cursor' && dragRef.current) {
+      const dx = wx - (dragRef.current.startX ?? wx);
+      const dy = wy - (dragRef.current.startY ?? wy);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist > 0.1) dragRef.current.hasMoved = true;
+
       if (dragRef.current.isRotating) {
-        // ใช้ bodiesRef (world meters) ไม่ใช่ Matter px
         const body = bodiesRef.current?.[dragRef.current.objId];
         if (body) {
-          const dx = wx - body.position.x;
-          const dy = wy - body.position.y;
-          // dy ใน world Y-up → กลับ dy เพื่อให้ rotation ถูกทิศ
-          const angle = Math.atan2(-dy, dx) + Math.PI / 2;
+          const rdx = wx - body.position.x;
+          const rdy = wy - body.position.y;
+          const angle = Math.atan2(-rdy, rdx) + Math.PI / 2;
           matterCanvasRef.current?.setObjectRotation(dragRef.current.objId, angle);
-          dragRef.current.hasMoved = true;
         }
-      } else {
+      } else if (!dragRef.current.isVectorHit) {
         let nx = wx, ny = wy;
         if (simState?.gridSnapping) {
           nx = Math.round(wx / unitStep) * unitStep;
           ny = Math.round(wy / unitStep) * unitStep;
         }
         matterCanvasRef.current?.teleportObject(dragRef.current.objId, nx, ny);
-        dragRef.current.hasMoved = true;
       }
     }
   }, [activeTool, simState?.gridSnapping, matterCanvasRef, bodiesRef]);
@@ -168,11 +166,12 @@ export const useVectorInteraction = ({
       }
 
     } else if (activeTool === 'cursor') {
-      if (dragRef.current?.hasMoved) {
+      if (dragRef.current?.isVectorHit && !dragRef.current.hasMoved) {
+        setVectorEditor({ ...dragRef.current.vHit, screenX: e.clientX, screenY: e.clientY });
+      } else if (dragRef.current?.hasMoved) {
         pushToHistory(simState);
       }
       dragRef.current = null;
-      setVectorEditor(null);
     }
   }, [activeTool, simState, pushToHistory, setVectorEditor, matterCanvasRef, controlPanelRef]);
 
