@@ -490,7 +490,12 @@ const MatterCanvas = forwardRef(({
       if (activeTool === 'add' && spawnConfig && mouseRef.current.x > -1000) {
         const us = unitStep || 1;
         const wx = Math.round(((mouseRef.current.x - ox) / PPM_ZOOMED) / us) * us;
-        const wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
+        let wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
+        
+        // Anti-noclip: Clamp preview to be at least half-size above ground
+        const minWy = (spawnConfig.size || 1) / 2;
+        if (wy < minWy) wy = minWy;
+
         const s = toScreen(wx, wy);
         const radiusPx = (spawnConfig.size * PIXELS_PER_METER * zoom) / 2;
         ctx.save();

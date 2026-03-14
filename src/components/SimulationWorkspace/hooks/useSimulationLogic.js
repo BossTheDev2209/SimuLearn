@@ -80,7 +80,11 @@ export const useSimulationLogic = ({
     if (activeTool === 'add') {
       const snapped = simState?.gridSnapping;
       const fx = snapped ? Math.round(wx / unitStep) * unitStep : wx;
-      const fy = snapped ? Math.round(wy / unitStep) * unitStep : wy;
+      let fy = snapped ? Math.round(wy / unitStep) * unitStep : wy;
+
+      // Anti-noclip: Clamp spawn altitude so object doesn't start stuck in ground
+      const minFy = (spawnConfig.size || 1) / 2;
+      if (fy < minFy) fy = minFy;
 
       // 1. Precise check using Matter.js engine
       const preciseHit = matterCanvasRef.current?.checkCollision(fx, fy, spawnConfig.size, spawnConfig.shape);
