@@ -66,8 +66,8 @@ export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport
   if (offScreenIndicators.length === 0) return null;
 
   return (
-    // ✅ z-[400] สูงพอที่จะอยู่เหนือ InteractiveGrid และ MatterCanvas
-    <div className="absolute inset-0 pointer-events-none z-[400] font-['Chakra_Petch']">
+    // ✅ z-[40] เพื่อให้อยู่หลัง Toolbar (z-50)
+    <div className="absolute inset-0 pointer-events-none z-[40] font-['Chakra_Petch']">
       {offScreenIndicators.map(cluster => {
         const lead = cluster[0];
         const isCluster = cluster.length > 1;

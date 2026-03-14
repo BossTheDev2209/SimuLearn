@@ -98,7 +98,14 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
       const tag = e.target.tagName;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
 
-      if (e.code === 'Space') { e.preventDefault(); handleTogglePlay(); }
+      if (e.code === 'Space') { 
+        e.preventDefault(); 
+        e.stopImmediatePropagation();
+        if (!isPlaying && displayTime > 0) {
+          handleRestartRef.current?.();
+        }
+        handleTogglePlay(); 
+      }
       if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleRestartRef.current?.(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
         e.preventDefault();
@@ -175,6 +182,8 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
                 isLocked={isPlaying} 
                 onUpdate={handleControlUpdate} 
                 onBeforeObjectUpdate={onBeforeObjectUpdate}
+                vectorEditor={vectorEditor}
+                setVectorEditor={setVectorEditor}
               />
             </div>
 

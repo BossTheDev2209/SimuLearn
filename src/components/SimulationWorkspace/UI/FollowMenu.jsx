@@ -37,7 +37,7 @@ export const FollowMenu = ({ isFollowMenuOpen, simState, followedObjectId, setFo
               displayedObjects.map((obj) => (
                 <div 
                   key={obj.id}
-                  onClick={() => setFollowedObjectId(obj.id)}
+                  onClick={() => setFollowedObjectId(prev => prev === obj.id ? null : obj.id)}
                   className={`
                     group relative flex flex-col items-center justify-center gap-2 p-2 rounded-[12px] transition-all cursor-pointer border h-[64px]
                     ${followedObjectId === obj.id 

@@ -3,6 +3,14 @@ import Matter from 'matter-js';
 import { PIXELS_PER_METER, renderObjectVectors, drawArrow } from './VectorRenderer';
 import { createPhysicsEngine, createGround, updatePhysics, worldToMatter, matterToWorld, computeGravityY } from './PhysicsEngine';
 
+const pointToSegmentDistance = (px, py, x1, y1, x2, y2) => {
+  const l2 = (x1 - x2) ** 2 + (y1 - y2) ** 2;
+  if (l2 === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.sqrt((px - (x1 + t * (x2 - x1))) ** 2 + (py - (y1 + t * (y2 - y1))) ** 2);
+};
+
 const MatterCanvas = forwardRef(({ 
   size, offset, zoom, unitStep, simState, onPhysicsChange, 
   activeTool, spawnConfig, gridSnapping, showCursorCoords, 
@@ -15,6 +23,7 @@ const MatterCanvas = forwardRef(({
   const bodyMap = useRef(new Map());
   const mouseRef = useRef({ x: -1000, y: -1000 });
   const drawingVectorRef = useRef(null);
+  const trajectoriesRef = useRef(new Map()); // id -> { color, points: [] }
   
   const [engineResetToken, setEngineResetToken] = useState(0);
   const [simSyncToken, setSimSyncToken] = useState(0);
@@ -57,8 +66,10 @@ const MatterCanvas = forwardRef(({
           const angleRad = (v.angle * Math.PI) / 180;
           const hx = wp.x + v.magnitude * Math.cos(angleRad) * SCALE;
           const hy = wp.y + v.magnitude * Math.sin(angleRad) * SCALE;
-          if (Math.sqrt((wx - hx) ** 2 + (wy - hy) ** 2) < 0.5)
+          
+          if (pointToSegmentDistance(wx, wy, wp.x, wp.y, hx, hy) < 0.3)
             return { objId: obj.id, type: 'velocity', index: v.isLegacy ? null : i, isLegacy: !!v.isLegacy, name: v.name, color: v.color || '#3B82F6', magnitude: v.magnitude, angle: v.angle };
+          
           vxSum += v.magnitude * Math.cos(angleRad);
           vySum += v.magnitude * Math.sin(angleRad);
         }
@@ -67,7 +78,7 @@ const MatterCanvas = forwardRef(({
         if (vMag > 0.001) {
           const vhx = wp.x + vxSum * SCALE;
           const vhy = wp.y + vySum * SCALE;
-          if (Math.sqrt((wx - vhx) ** 2 + (wy - vhy) ** 2) < 0.5)
+          if (pointToSegmentDistance(wx, wy, wp.x, wp.y, vhx, vhy) < 0.3)
             return { objId: obj.id, type: 'velocity', index: 'resultant' };
         }
 
@@ -80,7 +91,7 @@ const MatterCanvas = forwardRef(({
           const angleRad = (f.angle * Math.PI) / 180;
           const hx = wp.x + f.magnitude * Math.cos(angleRad) * SCALE;
           const hy = wp.y + f.magnitude * Math.sin(angleRad) * SCALE;
-          if (Math.sqrt((wx - hx) ** 2 + (wy - hy) ** 2) < 0.5)
+          if (pointToSegmentDistance(wx, wy, wp.x, wp.y, hx, hy) < 0.3)
             return { objId: obj.id, type: 'force', index: f.isLegacy ? null : i, isLegacy: !!f.isLegacy, name: f.name, color: f.color || '#EF4444', magnitude: f.magnitude, angle: f.angle };
           fxSum += f.magnitude * Math.cos(angleRad);
           fySum += f.magnitude * Math.sin(angleRad);
@@ -90,7 +101,7 @@ const MatterCanvas = forwardRef(({
         if (fMag > 0.001) {
           const fhx = wp.x + fxSum * SCALE;
           const fhy = wp.y + fySum * SCALE;
-          if (Math.sqrt((wx - fhx) ** 2 + (wy - fhy) ** 2) < 0.5)
+          if (pointToSegmentDistance(wx, wy, wp.x, wp.y, fhx, fhy) < 0.3)
             return { objId: obj.id, type: 'force', index: 'resultant' };
         }
         // Net Force head (Purple)
@@ -102,14 +113,13 @@ const MatterCanvas = forwardRef(({
           if (nMag > 0.001) {
             const nhx = wp.x + netX * SCALE;
             const nhy = wp.y + netY * SCALE;
-            if (Math.sqrt((wx - nhx) ** 2 + (wy - nhy) ** 2) < 0.5)
+            if (pointToSegmentDistance(wx, wy, wp.x, wp.y, nhx, nhy) < 0.3)
               return { objId: obj.id, type: 'force', index: 'netResultant' };
           }
         }
       }
       return null;
     },
-
     findSnapPoint: (wx, wy) => {
       const engine = engineRef.current;
       if (!engine) return null;
@@ -259,6 +269,7 @@ const MatterCanvas = forwardRef(({
     const engine = createPhysicsEngine();
     engineRef.current = engine;
     bodyMap.current.clear();
+    trajectoriesRef.current.clear();
     Matter.Composite.add(engine.world, createGround());
     setSimSyncToken(v => v + 1);
 
@@ -278,8 +289,29 @@ const MatterCanvas = forwardRef(({
           timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
           timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
           accumulator -= FIXED_DELTA_MS;
+
+          // Track Trajectories
+          if (loopPropsRef.current.simState?.showTrajectory) {
+            for (const [id, body] of bodyMap.current.entries()) {
+              if (body.label === 'ground') continue;
+              let traj = trajectoriesRef.current.get(id);
+              if (!traj) {
+                const obj = loopPropsRef.current.simState.objects?.find(o => o.id === id);
+                traj = { color: obj?.color || '#FFB65A', points: [] };
+                trajectoriesRef.current.set(id, traj);
+              }
+              traj.points.push({ ...matterToWorld(body.position.x, body.position.y), alpha: 0.8 });
+              if (traj.points.length > 200) traj.points.shift();
+            }
+          }
         }
       }
+
+      // Continuous Trajectory Decay (Happens even when paused)
+      trajectoriesRef.current.forEach((traj) => {
+        traj.points.forEach(p => { p.alpha -= 0.005; }); // Decay alpha
+        traj.points = traj.points.filter(p => p.alpha > 0); // Remove faded points
+      });
 
       // ✅ ส่ง world-meter bodies กลับให้ useCameraEngine
       if (loopPropsRef.current.onPhysicsChange) {
@@ -302,6 +334,30 @@ const MatterCanvas = forwardRef(({
       const ox = size.w / 2 + offset.x;
       const oy = size.h / 2 + offset.y;
       const toScreen = (wx, wy) => ({ x: ox + wx * PPM_ZOOMED, y: oy - wy * PPM_ZOOMED });
+
+      // Draw Trajectories
+      if (loopPropsRef.current.simState?.showTrajectory) {
+        trajectoriesRef.current.forEach((traj) => {
+          if (traj.points.length < 2) return;
+          ctx.save();
+          ctx.lineWidth = 2.5;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          
+          for (let i = 0; i < traj.points.length - 1; i++) {
+            const p1 = toScreen(traj.points[i].x, traj.points[i].y);
+            const p2 = toScreen(traj.points[i+1].x, traj.points[i+1].y);
+            
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = traj.color;
+            ctx.globalAlpha = traj.points[i].alpha;
+            ctx.stroke();
+          }
+          ctx.restore();
+        });
+      }
 
       // Draw Bodies
       Matter.Composite.allBodies(engine.world).forEach(body => {

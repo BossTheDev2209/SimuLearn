@@ -2,7 +2,10 @@ import React, { forwardRef, useImperativeHandle, memo } from 'react';
 import { useControlPanelState } from './useControlPanelState';
 import { ObjectItem, GlobalSettings } from './ControlPanelUI';
 
-const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'default', onUpdate, initialState, isLocked, onBeforeObjectUpdate }, ref) {
+const ControlPanel = forwardRef(function ControlPanel({ 
+  simulationType = 'default', onUpdate, initialState, isLocked, onBeforeObjectUpdate,
+  vectorEditor, setVectorEditor 
+}, ref) {
   // 🌟 ดึงข้อมูลและฟังก์ชันทั้งหมดมาจาก Custom Hook
   const { state, setters, actions, refs, imperativeMethods } = useControlPanelState(initialState, simulationType, onUpdate, onBeforeObjectUpdate);
 
@@ -36,6 +39,7 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
                 <ObjectItem
                   obj={obj} idx={idx} isLocked={isLocked} presetProps={state.presetProps} activePickerId={state.activePickerId}
                   setActivePickerId={setters.setActivePickerId} anchorRefs={refs.anchorRefs} actions={actions}
+                  vectorEditor={vectorEditor} setVectorEditor={setVectorEditor}
                 />
                 {idx < state.objects.length - 1 && <div className="border-b border-theme-border mt-3 mb-4" />}
               </React.Fragment>

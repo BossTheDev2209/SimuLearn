@@ -176,6 +176,10 @@ export const useSimulationLogic = ({
          }
       }
     } else if (activeTool === 'focus') {
+      const hitId = matterCanvasRef.current?.findObjectAt(wx, wy);
+      if (hitId) {
+        setFollowedObjectId(prev => prev === hitId ? null : hitId);
+      }
       setIsFollowMenuOpen(false); 
       setSelectedObjectId(null);
     } else if (activeTool === 'cursor') {

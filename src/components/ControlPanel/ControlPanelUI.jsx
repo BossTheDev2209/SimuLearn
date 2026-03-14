@@ -52,8 +52,23 @@ export const ToggleRow = memo(({ label, checked, onChange, disabled }) => (
   </label>
 ));
 
-export const ObjectItem = memo(({ obj, idx, isLocked, presetProps, activePickerId, setActivePickerId, anchorRefs, actions }) => {
+export const ObjectItem = memo(({ obj, idx, isLocked, presetProps, activePickerId, setActivePickerId, anchorRefs, actions, vectorEditor, setVectorEditor }) => {
   const { updateObjectColor, updateObjectShape, startRename, finishRename, removeObject, updateObjectSize, updateObjectValue, removeObjectValue } = actions;
+  
+  const handleVectorClick = (type, index) => {
+    if (isLocked) return;
+    const v = type === 'velocity' ? obj.values.velocities[index] : obj.values.forces[index];
+    setVectorEditor({
+      objId: obj.id,
+      type,
+      index,
+      magnitude: v.magnitude,
+      angle: v.angle,
+      color: v.color || (type === 'velocity' ? '#3B82F6' : '#EF4444'),
+      name: v.name
+    });
+  };
+
   return (
     <div className="mb-4">
       <div className="flex items-center gap-2 mb-3 relative">
@@ -93,20 +108,34 @@ export const ObjectItem = memo(({ obj, idx, isLocked, presetProps, activePickerI
       <div className="mt-3 bg-gray-50 dark:bg-[#1E1F22] rounded-lg p-2 border border-theme-border">
         <div className="flex justify-between items-center mb-1.5 px-1"><span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider">Vectors Outline</span></div>
         <div className="flex flex-col gap-1">
-          {(obj.values?.velocities || []).map((v, i) => (
-            <div key={`v-${i}`} className="flex items-center gap-2 group">
-              <div className="w-2 h-2 rounded-full bg-blue-500 shadow-sm" />
-              <span className="text-[11px] text-theme-primary font-bold">V {i+1}:</span><span className="text-[11px] text-theme-muted">{v.magnitude}m/s , {v.angle}°</span>
-              <button onClick={() => removeObjectValue(obj.id, 'velocities', i)} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-[#FFB65A] transition-all"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-            </div>
-          ))}
-          {(obj.values?.forces || []).map((f, i) => (
-            <div key={`f-${i}`} className="flex items-center gap-2 group">
-              <div className="w-2 h-2 rounded-full bg-red-500 shadow-sm" />
-              <span className="text-[11px] text-theme-primary font-bold">F {i+1}:</span><span className="text-[11px] text-theme-muted">{f.magnitude}N , {f.angle}°</span>
-              <button onClick={() => removeObjectValue(obj.id, 'forces', i)} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-            </div>
-          ))}
+          {(obj.values?.velocities || []).map((v, i) => {
+            const isSelected = vectorEditor?.objId === obj.id && vectorEditor?.type === 'velocity' && vectorEditor?.index === i;
+            return (
+              <div 
+                key={`v-${i}`} 
+                className={`flex items-center gap-2 group p-1 rounded transition-colors cursor-pointer ${isSelected ? 'bg-blue-500/10 border border-blue-500/20' : 'hover:bg-theme-hover dark:hover:bg-white/5 border border-transparent'}`}
+                onClick={() => handleVectorClick('velocity', i)}
+              >
+                <div className="w-2 h-2 rounded-full bg-blue-500 shadow-sm" />
+                <span className="text-[11px] text-theme-primary font-bold">V {i+1}:</span><span className="text-[11px] text-theme-muted">{v.magnitude}m/s , {v.angle}°</span>
+                <button onClick={(e) => { e.stopPropagation(); removeObjectValue(obj.id, 'velocities', i); if(isSelected) setVectorEditor(null); }} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-[#FFB65A] transition-all"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+            );
+          })}
+          {(obj.values?.forces || []).map((f, i) => {
+            const isSelected = vectorEditor?.objId === obj.id && vectorEditor?.type === 'force' && vectorEditor?.index === i;
+            return (
+              <div 
+                key={`f-${i}`} 
+                className={`flex items-center gap-2 group p-1 rounded transition-colors cursor-pointer ${isSelected ? 'bg-red-500/10 border border-red-500/20' : 'hover:bg-theme-hover dark:hover:bg-white/5 border border-transparent'}`}
+                onClick={() => handleVectorClick('force', i)}
+              >
+                <div className="w-2 h-2 rounded-full bg-red-500 shadow-sm" />
+                <span className="text-[11px] text-theme-primary font-bold">F {i+1}:</span><span className="text-[11px] text-theme-muted">{f.magnitude}N , {f.angle}°</span>
+                <button onClick={(e) => { e.stopPropagation(); removeObjectValue(obj.id, 'forces', i); if(isSelected) setVectorEditor(null); }} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+            );
+          })}
           {!(obj.values?.velocities?.length) && !(obj.values?.forces?.length) && <span className="text-[10px] text-theme-muted italic px-1 opacity-60">ไม่มีเวกเตอร์แปรผัน</span>}
         </div>
       </div>

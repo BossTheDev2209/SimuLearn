@@ -136,8 +136,8 @@ export const useVectorInteraction = ({
         const obj = simState?.objects?.find(o => o.id === v.objId);
         if (!obj) return;
 
-        // scale ×20 — ลาก 1m ในโลก = 20 m/s หรือ 20N
-        const magnitude = Math.round(dragDist * 20 * 10) / 10;
+        // เวกเตอร์คงที่ — ไม่ขึ้นกับระยะลาก (ลากเอาแค่ทิศทาง)
+        const magnitude = 10.0;
 
         // dy ใน world Y-up ถูกต้องอยู่แล้ว ไม่ต้องกลับ
         const angle = Math.round(Math.atan2(dy, dx) * (180 / Math.PI));
