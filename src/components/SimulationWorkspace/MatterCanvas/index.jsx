@@ -213,17 +213,28 @@ const MatterCanvas = forwardRef(({
         controlPanelRef.current.updateObjectValues(id, { angle: Math.round((angleRad * 180 / Math.PI) * 10) / 10 });
       }
     },
-    checkCollision: (wx, wy, size, shape) => {
+    checkCollision: (wx, wy, size, shape, excludeId = null) => {
       const engine = engineRef.current;
       if (!engine) return false;
-      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground');
+      
+      const bodies = Matter.Composite.allBodies(engine.world).filter(b => {
+        if (b.label === 'ground') return false;
+        if (excludeId) {
+          const bId = [...bodyMap.current.entries()].find(([, val]) => val === b)?.[0];
+          return bId !== excludeId;
+        }
+        return true;
+      });
+
       const { x: px, y: py } = worldToMatter(wx, wy);
       const radiusPx = (size * PIXELS_PER_METER) / 2;
       let tempBody;
       if (shape === 'circle') tempBody = Matter.Bodies.circle(px, py, radiusPx);
       else if (shape === 'polygon-3') tempBody = Matter.Bodies.polygon(px, py, 3, radiusPx / (Math.sqrt(3) / 2));
       else tempBody = Matter.Bodies.rectangle(px, py, radiusPx * 2, radiusPx * 2);
-      return Matter.Query.collides(tempBody, bodies).length > 0;
+      
+      const collisions = Matter.Query.collides(tempBody, bodies);
+      return collisions.length > 0;
     },
 
     handleSeek: (val) => {
@@ -447,6 +458,7 @@ const MatterCanvas = forwardRef(({
       let body = bodyMap.current.get(obj.id);
 
       if (!body) {
+        // Create new body
         const opts = { restitution: obj.values?.restitution || 0, friction: 0.0, frictionAir: 0.0, frictionStatic: 0.0 };
         const { x: px, y: py } = worldToMatter(obj.position?.x || 0, obj.position?.y || 10);
         const radiusPx = (obj.size || 1) * PIXELS_PER_METER / 2;
@@ -459,6 +471,35 @@ const MatterCanvas = forwardRef(({
         body.plugin = { size: obj.size || 1 };
         Matter.Composite.add(engine.world, body);
         bodyMap.current.set(obj.id, body);
+      } else {
+        // Update existing body if size or shape changed
+        const currentSize = body.plugin?.size || 1;
+        const currentShape = body.label;
+        
+        if (currentSize !== obj.size || currentShape !== obj.shape) {
+           Matter.Composite.remove(engine.world, body);
+           
+           const opts = { 
+             restitution: body.restitution, 
+             friction: body.friction, 
+             frictionAir: body.frictionAir, 
+             frictionStatic: body.frictionStatic,
+             angle: body.angle
+           };
+           const radiusPx = (obj.size || 1) * PIXELS_PER_METER / 2;
+           const px = body.position.x;
+           const py = body.position.y;
+
+           if (obj.shape === 'circle') body = Matter.Bodies.circle(px, py, radiusPx, opts);
+           else if (obj.shape === 'polygon-3') body = Matter.Bodies.polygon(px, py, 3, radiusPx / (Math.sqrt(3) / 2), opts);
+           else body = Matter.Bodies.rectangle(px, py, radiusPx * 2, radiusPx * 2, opts);
+           
+           body.label = obj.shape;
+           body.plugin = { size: obj.size || 1 };
+           Matter.Body.setVelocity(body, body.velocity);
+           Matter.Composite.add(engine.world, body);
+           bodyMap.current.set(obj.id, body);
+        }
       }
 
       body.render.fillStyle = obj.color;

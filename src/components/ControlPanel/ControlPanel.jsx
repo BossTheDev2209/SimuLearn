@@ -2,9 +2,9 @@ import React, { forwardRef, useImperativeHandle, memo } from 'react';
 import { useControlPanelState } from './useControlPanelState';
 import { ObjectItem, GlobalSettings } from './ControlPanelUI';
 
-const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'default', onUpdate, initialState, isLocked }, ref) {
+const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'default', onUpdate, initialState, isLocked, onBeforeObjectUpdate }, ref) {
   // 🌟 ดึงข้อมูลและฟังก์ชันทั้งหมดมาจาก Custom Hook
-  const { state, setters, actions, refs, imperativeMethods } = useControlPanelState(initialState, simulationType, onUpdate);
+  const { state, setters, actions, refs, imperativeMethods } = useControlPanelState(initialState, simulationType, onUpdate, onBeforeObjectUpdate);
 
   // 🌟 ผูกฟังก์ชันเข้ากับ Ref เพื่อให้ Workspace เรียกใช้ได้แบบไม่พัง
   useImperativeHandle(ref, () => imperativeMethods);

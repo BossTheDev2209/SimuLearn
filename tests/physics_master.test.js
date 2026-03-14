@@ -4,7 +4,6 @@ import {
   createPhysicsEngine,
   createGround,
   updatePhysics,
-  predictSimulationTime,
   computeGravityY,
   worldToMatter,
   matterToWorld,
@@ -21,9 +20,9 @@ import {
  */
 const makeEngine = (g = 9.8) => {
   const engine = createPhysicsEngine();
-  engine.world.gravity.scale = 1;
-  engine.world.gravity.x = 0;
-  engine.world.gravity.y = computeGravityY(g);
+  engine.gravity.scale = 0.001;
+  engine.gravity.x = 0;
+  engine.gravity.y = computeGravityY(g);
   Matter.Composite.add(engine.world, createGround());
   return engine;
 };
@@ -49,13 +48,13 @@ const FIXED_DELTA_S  = FIXED_DELTA_MS / 1000;
 /**
  * รัน simulation จนหยุดเองหรือครบ maxFrames
  */
-const runUntilStop = (engine, bodyMap, simState, maxTimeSec = 30, maxFrames = 20000) => {
+const runUntilStop = (engine, bodyMap, simState = 30, maxFrames = 20000) => {
   const timeState = { time: 0, isPlaying: true };
   const setIsPlaying = (v) => { timeState.isPlaying = v; };
 
   let ticks = 0;
   while (timeState.isPlaying && ticks < maxFrames) {
-    updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, maxTimeSec, timeState, setIsPlaying);
+    updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
     if (timeState.isPlaying) timeState.time += FIXED_DELTA_S;
     ticks++;
   }
@@ -89,7 +88,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     const bodyMap = new Map([["obj_1", ball]]);
     const simState = makeState(9.8, [makeObj("obj_1", 40.5)]);
 
-    const result = runUntilStop(engine, bodyMap, simState, 10);
+    const result = runUntilStop(engine, bodyMap, simState);
     console.log("Test 1 — land time:", result.time.toFixed(4), "s  (expected ~2.857s)");
 
     expect(result.time).toBeGreaterThan(2.84);
@@ -112,7 +111,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     const timeState = { time: 0, isPlaying: true };
     const setIsPlaying = (v) => { timeState.isPlaying = v; };
     for (let i = 0; i < 60; i++) {
-      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, 30, timeState, setIsPlaying);
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
       timeState.time += FIXED_DELTA_S;
     }
 
@@ -135,7 +134,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     const timeState = { time: 0, isPlaying: true };
     const setIsPlaying = (v) => { timeState.isPlaying = v; };
     for (let i = 0; i < 60; i++) {
-      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, 30, timeState, setIsPlaying);
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
       timeState.time += FIXED_DELTA_S;
     }
 
@@ -166,7 +165,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     const timeState = { time: 0, isPlaying: true };
     const setIsPlaying = (v) => { timeState.isPlaying = v; };
     for (let i = 0; i < 60; i++) {
-      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, 30, timeState, setIsPlaying);
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
       timeState.time += FIXED_DELTA_S;
     }
 
@@ -176,20 +175,27 @@ describe("PhysicsEngine — 10 Test Cases", () => {
   });
 
   // ── Test 5 ──────────────────────────────────────────────────────────────
-  test("5. Simulation หยุดเองเมื่อถึง maxTime", () => {
-    const engine = makeEngine(9.8);
-    const ball = makeBall(0, 10000); // สูงมาก ไม่ถึงพื้นใน maxTime
-    Matter.Composite.add(engine.world, ball);
-
-    const bodyMap = new Map([["obj_1", ball]]);
-    const simState = makeState(9.8, [makeObj("obj_1", 10000)]);
-
-    const MAX_TIME = 5;
-    const result = runUntilStop(engine, bodyMap, simState, MAX_TIME, 100000);
-    console.log("Test 5 — stopped at:", result.time.toFixed(4), "s  (maxTime:", MAX_TIME, "s)");
-
-    expect(result.time).toBeLessThanOrEqual(MAX_TIME + FIXED_DELTA_S);
+  // วางบนพื้น: matter_y = -radiusPx (resting position)
+  test("5. Simulation หยุดเองเมื่อวัตถุทั้งหมดนิ่ง (allSettled)", () => {
+  const engine = makeEngine(9.8);
+  const radiusPx = 0.5 * PPM;
+  const ball = Matter.Bodies.circle(0, -radiusPx, radiusPx, {
+    friction: 0, frictionAir: 0, frictionStatic: 0, restitution: 0,
   });
+  Matter.Composite.add(engine.world, ball);
+
+  const bodyMap = new Map([["obj_1", ball]]);
+  const simState = makeState(9.8, [makeObj("obj_1", 0.5)]);
+
+  const timeState = { time: 0, isPlaying: true };
+  const setIsPlaying = (v) => { timeState.isPlaying = v; };
+
+  // รัน tick แรกเดียว — วัตถุอยู่บนพื้นแล้ว ต้อง settle ทันที
+  updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+
+  console.log("Test 5 — isPlaying:", timeState.isPlaying, "  (expected: false)");
+  expect(timeState.isPlaying).toBe(false);
+});
 
   // ── Test 6 ──────────────────────────────────────────────────────────────
   test("6. 60Hz vs 120Hz feed — ผลต่างกันไม่เกิน 0.1s", () => {
@@ -206,7 +212,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
         if (!timeState.isPlaying) break;
         acc += delta;
         while (acc >= FIXED_DELTA_MS) {
-          updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, 10, timeState, setIsPlaying);
+          updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
           if (timeState.isPlaying) timeState.time += FIXED_DELTA_S;
           acc -= FIXED_DELTA_MS;
         }
@@ -246,7 +252,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
 
     // รัน 60 ticks = 1 วินาที — override settled ด้วยการไม่ snap (body ไม่ on ground)
     for (let i = 0; i < 60; i++) {
-      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, 30, timeState, setIsPlaying);
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
       timeState.time += FIXED_DELTA_S;
     }
 
@@ -263,7 +269,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
       Matter.Composite.add(engine.world, ball);
       const bodyMap = new Map([["obj_1", ball]]);
       const simState = makeState(g, [makeObj("obj_1", 40.5)]);
-      return runUntilStop(engine, bodyMap, simState, 30).time;
+      return runUntilStop(engine, bodyMap, simState).time;
     };
 
     const tEarth = drop(9.8);
@@ -278,25 +284,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
   });
 
   // ── Test 9 ──────────────────────────────────────────────────────────────
-  test("9. predictSimulationTime — ทำนายนานกว่าเวลาจริงแต่ไม่เกิน 10s", () => {
-    const simState = makeState(9.8, [{
-      id: "obj_1",
-      isSpawned: true,
-      size: 1,
-      position: { x: 0, y: 40.5 },
-      values: {},
-    }]);
-
-    const predicted = predictSimulationTime(simState);
-    // t_real ≈ 2.857s → predicted = 2.857 * 1.2 + 1.0 ≈ 4.43s
-    console.log("Test 9 — predicted:", predicted.toFixed(4), "s  (real ~2.857s)");
-
-    expect(predicted).toBeGreaterThan(2.857); // ต้องนานกว่าเวลาจริง
-    expect(predicted).toBeLessThan(10);
-  });
-
-  // ── Test 10 ─────────────────────────────────────────────────────────────
-  test("10. ไม่มีวัตถุ spawn — simulation หยุดทันทีใน tick แรก", () => {
+  test("9. ไม่มีวัตถุ spawn — simulation หยุดทันทีใน tick แรก", () => {
     const engine = makeEngine(9.8);
     const bodyMap = new Map(); // ไม่มี body เลย
     const simState = makeState(9.8, [
@@ -306,9 +294,9 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     const timeState = { time: 0, isPlaying: true };
     const setIsPlaying = (v) => { timeState.isPlaying = v; };
 
-    updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, 10, timeState, setIsPlaying);
+    updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
 
-    console.log("Test 10 — isPlaying:", timeState.isPlaying, "  (expected: false)");
+    console.log("Test 9 — isPlaying:", timeState.isPlaying, "  (expected: false)");
     expect(timeState.isPlaying).toBe(false);
   });
 

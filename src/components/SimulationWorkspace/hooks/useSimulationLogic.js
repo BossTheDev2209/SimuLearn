@@ -271,6 +271,22 @@ export const useSimulationLogic = ({
     }
   }, [activeTool, rulerPoints, setRulerPoints]);
 
+  const onBeforeObjectUpdate = useCallback((objId, changes) => {
+    if (changes.size !== undefined) {
+      const obj = simState?.objects?.find(o => o.id === objId);
+      if (!obj) return true;
+      
+      const pos = bodiesRef.current?.[objId]?.position || obj.position;
+      const collided = matterCanvasRef.current?.checkCollision(pos.x, pos.y, changes.size, obj.shape, objId);
+      
+      if (collided) {
+        showToast('ไม่สามารถเพิ่มขนาดวัตถุได้');
+        return false;
+      }
+    }
+    return true;
+  }, [simState, bodiesRef, matterCanvasRef, showToast]);
+
   const handleGridDoubleClick = useCallback((wx, wy) => {
     if (activeTool === 'cursor') {
       const hitId = matterCanvasRef.current?.findObjectAt(wx, wy);
@@ -286,6 +302,7 @@ export const useSimulationLogic = ({
     handleClearAllConfirm,
     handleGridClick,
     handleGridRightClick,
-    handleGridDoubleClick
+    handleGridDoubleClick,
+    onBeforeObjectUpdate
   };
 };

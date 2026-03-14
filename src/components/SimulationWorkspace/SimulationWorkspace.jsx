@@ -27,7 +27,6 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
   const shouldHideLogo = isInteracting || activeSim !== null;
   const [simState, setSimState] = useState(null);
 
-
   // Core Refs
   const gridRef = useRef(null);
   const matterCanvasRef = useRef(null);
@@ -57,10 +56,9 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
   const { bodiesRef, handleCameraChange, handleTeleport, handlePhysicsChange } = useCameraEngine(activeSim, followedObjectId, onSavePhysicsState, gridRef);
 
-  const { handleControlUpdate, updateVectorValue, handleClearAllConfirm, handleGridClick, handleGridRightClick, handleGridDoubleClick } = useSimulationLogic({
+  const { handleControlUpdate, updateVectorValue, handleClearAllConfirm, handleGridClick, handleGridRightClick, handleGridDoubleClick, onBeforeObjectUpdate } = useSimulationLogic({
     simState, setSimState, controlPanelRef, matterCanvasRef, bodiesRef, 
     pushToHistory, showToast, spawnConfig, setIsClearModalOpen, setIsFollowMenuOpen, activeTool,
-    followedObjectId, setFollowedObjectId,
     followedObjectId, setFollowedObjectId,
     selectedObjectId, setSelectedObjectId,
     selectedObjectIds, setSelectedObjectIds,
@@ -71,7 +69,9 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
   const { handleGridPointerDown, handleGridPointerMove, handleGridPointerUp } = useVectorInteraction({
     activeTool, simState, matterCanvasRef, pushToHistory, controlPanelRef, 
     setVectorEditor, followedObjectId, setFollowedObjectId,
-    selectedObjectId, setSelectedObjectId, bodiesRef
+    selectedObjectId, setSelectedObjectId,
+    selectedObjectIds, setSelectedObjectIds, // ✅ เพิ่ม — ทำให้ Shift+click อัปเดต multi-select ได้
+    bodiesRef
   });
 
   // Imperative Handle
@@ -84,8 +84,10 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
     if (isPlaying) {
       setVectorEditor(null);
       setSelectedObjectId(null);
+      setSelectedObjectIds([]); // ✅ เคลียร์ multi-select ตอนเล่น
     } 
-  }, [isPlaying, setVectorEditor, setSelectedObjectId]);
+  }, [isPlaying, setVectorEditor, setSelectedObjectId, setSelectedObjectIds]);
+
   useEffect(() => { if (simState && onSaveControlState) onSaveControlState(simState); }, [simState, onSaveControlState]);
 
   const handleRestartRef = useRef(handleRestart);
@@ -109,17 +111,34 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
         if (restored && controlPanelRef.current?.resetState) controlPanelRef.current.resetState(restored);
       }
       if (e.code === 'Delete') {
-        if (selectedObjectId && controlPanelRef.current?.removeObject) {
+        const hasMultiple = selectedObjectIds && selectedObjectIds.length > 0;
+        const targetId = selectedObjectId;
+        const targetIds = selectedObjectIds;
+
+        if ((targetId || hasMultiple) && controlPanelRef.current) {
           e.preventDefault();
-          controlPanelRef.current.removeObject(selectedObjectId);
-          setSelectedObjectId(null);
-          showToast('ลบวัตถุที่เลือกแล้ว');
+          pushToHistory(simState);
+          
+          if (hasMultiple) {
+            if (controlPanelRef.current.removeObjects) {
+              controlPanelRef.current.removeObjects(targetIds);
+            } else {
+              targetIds.forEach(id => controlPanelRef.current.removeObject?.(id));
+            }
+            setSelectedObjectIds([]);
+            setSelectedObjectId(null);
+            showToast('ลบวัตถุทั้งหมดแล้ว');
+          } else if (targetId) {
+            controlPanelRef.current.removeObject?.(targetId);
+            setSelectedObjectId(null);
+            showToast('ลบวัตถุที่เลือกแล้ว');
+          }
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePlay, undoRef, redoRef, displayTime, selectedObjectId, setSelectedObjectId, showToast]);
+  }, [handleTogglePlay, undoRef, redoRef, displayTime, selectedObjectId, setSelectedObjectId, selectedObjectIds, setSelectedObjectIds, showToast, simState, pushToHistory]);
 
   // UI rendering
   return (
@@ -148,7 +167,15 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
           <div className="flex-1 flex min-h-0 px-6 pb-6 gap-4">
             <div className="h-full rounded-2xl overflow-hidden border border-theme-border shadow-sm bg-theme-panel z-20 w-[280px] shrink-0 relative">
-              <ControlPanel ref={controlPanelRef} key={activeSim.id} initialState={simState || activeSim.controlState || activeSim.data} simulationType={activeSim.simulationType || activeSim.data?.simulationType || 'default'} isLocked={isPlaying} onUpdate={handleControlUpdate} />
+              <ControlPanel 
+                ref={controlPanelRef} 
+                key={activeSim.id} 
+                initialState={simState || activeSim.controlState || activeSim.data} 
+                simulationType={activeSim.simulationType || activeSim.data?.simulationType || 'default'} 
+                isLocked={isPlaying} 
+                onUpdate={handleControlUpdate} 
+                onBeforeObjectUpdate={onBeforeObjectUpdate}
+              />
             </div>
 
             <div className="flex-1 rounded-2xl overflow-hidden border border-theme-border bg-white dark:bg-[#2B2D31] relative shadow-sm">
@@ -162,9 +189,22 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
                 {({ size, offset, zoom, unitStep, subStep }) => (
                   <>
                     <MatterCanvas 
-                      ref={matterCanvasRef} size={size} offset={offset} zoom={zoom} unitStep={subStep} simState={simState} initialPhysics={activeSim.physicsState} onPhysicsChange={handlePhysicsChange} activeTool={activeTool} spawnConfig={spawnConfig}
-                      gridSnapping={!!simState?.gridSnapping} showCursorCoords={!!simState?.showCursorCoords} showResultantVector={!!simState?.showResultantVector} timeStateRef={timeStateRef} setIsPlaying={setIsPlaying} followedObjectId={followedObjectId} 
-                      selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds}
+                      ref={matterCanvasRef}
+                      size={size} offset={offset} zoom={zoom} unitStep={subStep}
+                      simState={simState}
+                      initialPhysics={activeSim.physicsState}
+                      onPhysicsChange={handlePhysicsChange}
+                      activeTool={activeTool}
+                      spawnConfig={spawnConfig}
+                      gridSnapping={!!simState?.gridSnapping}
+                      showCursorCoords={!!simState?.showCursorCoords}
+                      showResultantVector={!!simState?.showResultantVector}
+                      timeStateRef={timeStateRef}
+                      setIsPlaying={setIsPlaying}
+                      followedObjectId={followedObjectId}
+                      selectedObjectId={selectedObjectId}
+                      selectedObjectIds={selectedObjectIds}
+                      controlPanelRef={controlPanelRef} // ✅ เพิ่ม — ทำให้ MatterCanvas เรียก removeObject/removeObjects ได้
                     />
                     <TrackingSystem objects={simState?.objects} bodies={bodiesRef.current} offset={offset} zoom={zoom} size={size} onTeleport={handleTeleport} showOffScreenIndicators={!!simState?.showOffScreenIndicators} />
                     <RulerSystem rulerPoints={rulerPoints} setRulerPoints={setRulerPoints} activeTool={activeTool} offset={offset} zoom={zoom} size={size} unitStep={subStep} matterCanvasRef={matterCanvasRef} />
@@ -173,7 +213,6 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
                 )}
               </InteractiveGrid>
 
-              {/* Time UI Control - Moved outside InteractiveGrid for reliability */}
               <div className="absolute top-6 right-6 z-[60] pointer-events-auto">
                 <Timebar 
                   isPlaying={isPlaying} 
