@@ -50,7 +50,8 @@ const MatterCanvas = forwardRef(({
 
     findVectorAt: (wx, wy) => {
       if (!simState?.objects) return null;
-      const SCALE = 0.05;
+      const SCALE = 0.3;
+      const getVisualLength = (mag) => Math.min(Math.max(mag * SCALE, 0.5), 8.0);
       for (const obj of simState.objects) {
         if (!obj.isSpawned) continue;
         const body = bodyMap.current.get(obj.id);
@@ -64,8 +65,9 @@ const MatterCanvas = forwardRef(({
         for (let i = 0; i < vels.length; i++) {
           const v = vels[i];
           const angleRad = (v.angle * Math.PI) / 180;
-          const hx = wp.x + v.magnitude * Math.cos(angleRad) * SCALE;
-          const hy = wp.y + v.magnitude * Math.sin(angleRad) * SCALE;
+          const vLen = getVisualLength(v.magnitude);
+          const hx = wp.x + vLen * Math.cos(angleRad);
+          const hy = wp.y + vLen * Math.sin(angleRad);
           
           if (pointToSegmentDistance(wx, wy, wp.x, wp.y, hx, hy) < 0.3)
             return { objId: obj.id, type: 'velocity', index: v.isLegacy ? null : i, isLegacy: !!v.isLegacy, name: v.name, color: v.color || '#3B82F6', magnitude: v.magnitude, angle: v.angle };
@@ -76,8 +78,10 @@ const MatterCanvas = forwardRef(({
         // Resultant Velocity head
         const vMag = Math.sqrt(vxSum**2 + vySum**2);
         if (vMag > 0.001) {
-          const vhx = wp.x + vxSum * SCALE;
-          const vhy = wp.y + vySum * SCALE;
+          const vAngle = Math.atan2(vySum, vxSum);
+          const vLen = getVisualLength(vMag);
+          const vhx = wp.x + vLen * Math.cos(vAngle);
+          const vhy = wp.y + vLen * Math.sin(vAngle);
           if (pointToSegmentDistance(wx, wy, wp.x, wp.y, vhx, vhy) < 0.3)
             return { objId: obj.id, type: 'velocity', index: 'resultant' };
         }
@@ -89,8 +93,9 @@ const MatterCanvas = forwardRef(({
         for (let i = 0; i < forces.length; i++) {
           const f = forces[i];
           const angleRad = (f.angle * Math.PI) / 180;
-          const hx = wp.x + f.magnitude * Math.cos(angleRad) * SCALE;
-          const hy = wp.y + f.magnitude * Math.sin(angleRad) * SCALE;
+          const fLen = getVisualLength(f.magnitude);
+          const hx = wp.x + fLen * Math.cos(angleRad);
+          const hy = wp.y + fLen * Math.sin(angleRad);
           if (pointToSegmentDistance(wx, wy, wp.x, wp.y, hx, hy) < 0.3)
             return { objId: obj.id, type: 'force', index: f.isLegacy ? null : i, isLegacy: !!f.isLegacy, name: f.name, color: f.color || '#EF4444', magnitude: f.magnitude, angle: f.angle };
           fxSum += f.magnitude * Math.cos(angleRad);
@@ -99,8 +104,10 @@ const MatterCanvas = forwardRef(({
         // Resultant Force head (Red)
         const fMag = Math.sqrt(fxSum**2 + fySum**2);
         if (fMag > 0.001) {
-          const fhx = wp.x + fxSum * SCALE;
-          const fhy = wp.y + fySum * SCALE;
+          const fAngle = Math.atan2(fySum, fxSum);
+          const fLen = getVisualLength(fMag);
+          const fhx = wp.x + fLen * Math.cos(fAngle);
+          const fhy = wp.y + fLen * Math.sin(fAngle);
           if (pointToSegmentDistance(wx, wy, wp.x, wp.y, fhx, fhy) < 0.3)
             return { objId: obj.id, type: 'force', index: 'resultant' };
         }
@@ -111,8 +118,10 @@ const MatterCanvas = forwardRef(({
           const netY = fySum - weight;
           const nMag = Math.sqrt(netX**2 + netY**2);
           if (nMag > 0.001) {
-            const nhx = wp.x + netX * SCALE;
-            const nhy = wp.y + netY * SCALE;
+            const nAngle = Math.atan2(netY, netX);
+            const nLen = getVisualLength(nMag);
+            const nhx = wp.x + nLen * Math.cos(nAngle);
+            const nhy = wp.y + nLen * Math.sin(nAngle);
             if (pointToSegmentDistance(wx, wy, wp.x, wp.y, nhx, nhy) < 0.3)
               return { objId: obj.id, type: 'force', index: 'netResultant' };
           }
@@ -490,9 +499,10 @@ const MatterCanvas = forwardRef(({
 
       // Vector hover highlight for cursor and erase tools
       if ((activeTool === 'erase' || activeTool === 'cursor') && mouseRef.current.x > -1000) {
+        const SCALE = 0.3; // same as findVectorAt
+        const getVisualLength = (mag) => Math.min(Math.max(mag * SCALE, 0.5), 8.0);
         const wx = (mouseRef.current.x - ox) / PPM_ZOOMED;
         const wy = (oy - mouseRef.current.y) / PPM_ZOOMED;
-        const SCALE = 0.05; // same as findVectorAt
 
         for (const obj of (loopSimState?.objects || [])) {
           if (!obj.isSpawned) continue;
@@ -507,8 +517,9 @@ const MatterCanvas = forwardRef(({
 
           for (const v of allVecs) {
             const angleRad = (v.angle * Math.PI) / 180;
-            const hx = wp.x + v.magnitude * Math.cos(angleRad) * SCALE;
-            const hy = wp.y + v.magnitude * Math.sin(angleRad) * SCALE;
+            const vLen = getVisualLength(v.magnitude);
+            const hx = wp.x + vLen * Math.cos(angleRad);
+            const hy = wp.y + vLen * Math.sin(angleRad);
             
             if (pointToSegmentDistance(wx, wy, wp.x, wp.y, hx, hy) < 0.3) {
               // Draw highlighted version

@@ -44,15 +44,28 @@ export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue
   };
 
   const commitMag = () => {
-    const val = parseFloat(magInput);
-    if (!isNaN(val)) handleUpdate({ magnitude: val });
-    else setMagInput(String(data.magnitude));
+    let val = parseFloat(magInput);
+    if (!isNaN(val)) {
+      handleUpdate({ magnitude: val });
+      setMagInput(String(val));
+    } else {
+      setMagInput(String(data.magnitude));
+    }
   };
 
   const commitAngle = () => {
-    const val = parseFloat(angleInput);
-    if (!isNaN(val)) handleUpdate({ angle: val });
-    else setAngleInput(String(data.angle));
+    let val = parseFloat(angleInput);
+    if (!isNaN(val)) {
+      // Normalize to 0-360
+      let normalized = val % 360;
+      if (normalized < 0) normalized += 360;
+      normalized = Math.round(normalized * 10) / 10;
+      
+      handleUpdate({ angle: normalized });
+      setAngleInput(String(normalized));
+    } else {
+      setAngleInput(String(data.angle));
+    }
   };
 
   const accentColor = data.type === 'velocity' ? '#3B82F6' : '#EF4444';

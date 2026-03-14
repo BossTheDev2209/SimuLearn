@@ -33,7 +33,7 @@ export const drawArrow = (ctx, toScreen, fromWx, fromWy, toWx, toWy, color, thic
     ctx.fillStyle = color;
     ctx.shadowBlur = 4;
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.fillText(label, toPos.x + 5, toPos.y - 5);
+    ctx.fillText(label, toPos.x + 8, toPos.y - 8);
   }
   ctx.restore();
 };
@@ -69,15 +69,16 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
 
   if (vels.length === 0 && forces.length === 0) return;
 
-  // SCALE: 0.05 ม. ต่อ 1 m/s (หรือ 1N) 
-  // เพราะ dragDist 1m ในโลก = magnitude 20 -> 20 * 0.05 = 1m (ขนาดยอมรับได้)
-  const SCALE = 0.05;
+  // SCALE: 0.3 ม. ต่อ 1 m/s (หรือ 1N) 
+  const SCALE = 0.3;
+  const getVisualLength = (mag) => Math.min(Math.max(mag * SCALE, 0.5), 8.0);
 
   // ── A. Velocity (Blue) ──────────────────────────────────────────────────
   vels.forEach(v => {
     const angleRad = (v.angle * Math.PI) / 180;
-    const ex = origin.x + v.magnitude * Math.cos(angleRad) * SCALE;
-    const ey = origin.y + v.magnitude * Math.sin(angleRad) * SCALE;
+    const vLen = getVisualLength(v.magnitude);
+    const ex = origin.x + vLen * Math.cos(angleRad);
+    const ey = origin.y + vLen * Math.sin(angleRad);
     const color = v.color || '#3B82F6';
     drawArrow(ctx, toScreen, origin.x, origin.y, ex, ey, color, 2, 0.45, v.name);
   });
@@ -90,15 +91,19 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
       sy += v.magnitude * Math.sin((v.angle * Math.PI) / 180);
     });
     if (Math.abs(sx) > 0.001 || Math.abs(sy) > 0.001) {
-      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + sx * SCALE, origin.y + sy * SCALE, '#3B82F6', 3.5, 1.0, 'Σv');
+      const mag = Math.sqrt(sx**2 + sy**2);
+      const angle = Math.atan2(sy, sx);
+      const vLen = getVisualLength(mag);
+      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + vLen * Math.cos(angle), origin.y + vLen * Math.sin(angle), '#3B82F6', 3.5, 1.0, 'Σv');
     }
   }
 
   // ── B. Force (Red) ──────────────────────────────────────────────────────
   forces.forEach(f => {
     const angleRad = (f.angle * Math.PI) / 180;
-    const ex = origin.x + f.magnitude * Math.cos(angleRad) * SCALE;
-    const ey = origin.y + f.magnitude * Math.sin(angleRad) * SCALE;
+    const fLen = getVisualLength(f.magnitude);
+    const ex = origin.x + fLen * Math.cos(angleRad);
+    const ey = origin.y + fLen * Math.sin(angleRad);
     const color = f.color || '#EF4444';
     drawArrow(ctx, toScreen, origin.x, origin.y, ex, ey, color, 2, 0.45, f.name);
   });
@@ -112,7 +117,10 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
 
   if (forces.length > 1 || (forces.length === 1 && forces[0].isLegacy)) {
     if (Math.abs(fsx) > 0.001 || Math.abs(fsy) > 0.001) {
-      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + fsx * SCALE, origin.y + fsy * SCALE, '#EF4444', 3.5, 1.0, 'ΣF_ext');
+      const mag = Math.sqrt(fsx**2 + fsy**2);
+      const angle = Math.atan2(fsy, fsx);
+      const vLen = getVisualLength(mag);
+      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + vLen * Math.cos(angle), origin.y + vLen * Math.sin(angle), '#EF4444', 3.5, 1.0, 'ΣF_ext');
     }
   }
 
@@ -124,8 +132,11 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
     const netY = fsy - weight;
 
     if (Math.abs(netX) > 0.001 || Math.abs(netY) > 0.001) {
+      const mag = Math.sqrt(netX**2 + netY**2);
+      const angle = Math.atan2(netY, netX);
+      const vLen = getVisualLength(mag);
       // ใช้ความหนามากกว่า เพื่อแยกแยะ
-      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + netX * SCALE, origin.y + netY * SCALE, '#A855F7', 4.5, 1.0, 'ΣF_net');
+      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + vLen * Math.cos(angle), origin.y + vLen * Math.sin(angle), '#A855F7', 4.5, 1.0, 'ΣF_net');
     }
   }
 };
