@@ -37,6 +37,7 @@ export default function useSimulations(myUserId) {
     const fetchData = async () => {
       if (!myUserId) return;
       
+      setIsHistoryLoading(true);
       console.log(`%c🔄 fetchData TRIGGERED at: ${new Date().getTime()}`, "color: #3b82f6; font-weight: bold;");
       
       if (!myUserId.startsWith("guest_")) {
@@ -115,7 +116,9 @@ export default function useSimulations(myUserId) {
           }
           console.error("❌ History fetch error:", err);
         } finally {
-          setIsHistoryLoading(false);
+          if (!controller.signal.aborted) {
+            setIsHistoryLoading(false);
+          }
         }
       } else {
         setIsHistoryLoading(false);

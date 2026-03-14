@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ControlPanel from '../ControlPanel/ControlPanel';
 import InteractiveGrid from './InteractiveGrid/index';
 import MatterCanvas from './MatterCanvas/index';
-import Timebar from './Timebar';
 
 // UI Components
 import { Toolbar } from './UI/Toolbar';
@@ -13,8 +12,8 @@ import { FollowMenu } from './UI/FollowMenu';
 import { VectorTooltip } from './UI/VectorTooltip';
 import { TrackingSystem } from './UI/TrackingSystem';
 import { RulerSystem } from './UI/RulerSystem';
-import { SimulationTimeline } from './UI/SimulationTimeline';
 import { ClearModal } from './UI/ClearModal';
+import Timebar from './Timebar';
 
 // Hooks
 import { useWorkspaceState } from '../../hooks/useWorkspaceState';
@@ -27,7 +26,6 @@ import { useCameraEngine } from './hooks/useCameraEngine';
 const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveControlState, onSavePhysicsState }, ref) => {
   const shouldHideLogo = isInteracting || activeSim !== null;
   const [simState, setSimState] = useState(null);
-  const [isTimelineCollapsed, setIsTimelineCollapsed] = useState(false);
 
 
   // Core Refs
@@ -41,6 +39,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
     activeTool, vectorEditor, setVectorEditor, isToolbarOpen, setIsToolbarOpen,
     isClearModalOpen, setIsClearModalOpen, spawnToast, showToast, spawnConfig, setSpawnConfig,
     followedObjectId, setFollowedObjectId, selectedObjectId, setSelectedObjectId,
+    selectedObjectIds, setSelectedObjectIds,
     rulerPoints, setRulerPoints,
     isFollowMenuOpen, setIsFollowMenuOpen, handleToolClick
   } = workspaceState;
@@ -49,20 +48,24 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
   const { 
     isPlaying, setIsPlaying, timeScale, setTimeScale, 
-    displayTime, maxTime, timeStateRef, handleTogglePlay: _handleTogglePlay, handleRestart, handleSeek 
+    displayTime, timeStateRef, handleTogglePlay: _handleTogglePlay, handleRestart, handleSeek
   } = useTimeManagement(simState, setSimState, onSaveControlState, matterCanvasRef, controlPanelRef);
 
   const handleTogglePlay = useCallback(() => {
-    if (displayTime >= maxTime && !isPlaying) return;
     _handleTogglePlay();
-  }, [displayTime, maxTime, isPlaying, _handleTogglePlay]);
+  }, [_handleTogglePlay]);
 
   const { bodiesRef, handleCameraChange, handleTeleport, handlePhysicsChange } = useCameraEngine(activeSim, followedObjectId, onSavePhysicsState, gridRef);
 
-  const { handleControlUpdate, updateVectorValue, handleClearAllConfirm, handleGridClick, handleGridRightClick } = useSimulationLogic({
+  const { handleControlUpdate, updateVectorValue, handleClearAllConfirm, handleGridClick, handleGridRightClick, handleGridDoubleClick } = useSimulationLogic({
     simState, setSimState, controlPanelRef, matterCanvasRef, bodiesRef, 
     pushToHistory, showToast, spawnConfig, setIsClearModalOpen, setIsFollowMenuOpen, activeTool,
-    selectedObjectId, setSelectedObjectId, rulerPoints, setRulerPoints
+    followedObjectId, setFollowedObjectId,
+    followedObjectId, setFollowedObjectId,
+    selectedObjectId, setSelectedObjectId,
+    selectedObjectIds, setSelectedObjectIds,
+    rulerPoints, setRulerPoints,
+    handleTeleport
   });
 
   const { handleGridPointerDown, handleGridPointerMove, handleGridPointerUp } = useVectorInteraction({
@@ -73,7 +76,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
   // Imperative Handle
   useImperativeHandle(ref, () => ({
-    handleRestart, handleTogglePlay, handleSeek, pushToHistory
+    handleRestart, handleTogglePlay, pushToHistory
   }));
 
   // Effects
@@ -93,7 +96,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
       const tag = e.target.tagName;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
 
-      if (e.code === 'Space') { e.preventDefault(); if (displayTime < maxTime) handleTogglePlay(); }
+      if (e.code === 'Space') { e.preventDefault(); handleTogglePlay(); }
       if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleRestartRef.current?.(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
         e.preventDefault();
@@ -116,7 +119,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePlay, undoRef, redoRef, displayTime, maxTime, selectedObjectId, setSelectedObjectId, showToast]);
+  }, [handleTogglePlay, undoRef, redoRef, displayTime, selectedObjectId, setSelectedObjectId, showToast]);
 
   // UI rendering
   return (
@@ -155,12 +158,13 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
                 <FollowMenu isFollowMenuOpen={isFollowMenuOpen} setIsFollowMenuOpen={setIsFollowMenuOpen} simState={simState} followedObjectId={followedObjectId} setFollowedObjectId={setFollowedObjectId} activeTool={activeTool} />
               </div>
 
-              <InteractiveGrid ref={gridRef} initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange} activeTool={activeTool} onGridClick={handleGridClick} onGridRightClick={handleGridRightClick} onGridPointerDown={handleGridPointerDown} onGridPointerMove={handleGridPointerMove} onGridPointerUp={handleGridPointerUp}>
+              <InteractiveGrid ref={gridRef} initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange} activeTool={activeTool} onGridClick={handleGridClick} onGridRightClick={handleGridRightClick} onGridDoubleClick={handleGridDoubleClick} onGridPointerDown={handleGridPointerDown} onGridPointerMove={handleGridPointerMove} onGridPointerUp={handleGridPointerUp}>
                 {({ size, offset, zoom, unitStep, subStep }) => (
                   <>
                     <MatterCanvas 
                       ref={matterCanvasRef} size={size} offset={offset} zoom={zoom} unitStep={subStep} simState={simState} initialPhysics={activeSim.physicsState} onPhysicsChange={handlePhysicsChange} activeTool={activeTool} spawnConfig={spawnConfig}
-                      gridSnapping={!!simState?.gridSnapping} showCursorCoords={!!simState?.showCursorCoords} showResultantVector={!!simState?.showResultantVector} timeStateRef={timeStateRef} setIsPlaying={setIsPlaying} maxTime={maxTime} followedObjectId={followedObjectId} selectedObjectId={selectedObjectId}
+                      gridSnapping={!!simState?.gridSnapping} showCursorCoords={!!simState?.showCursorCoords} showResultantVector={!!simState?.showResultantVector} timeStateRef={timeStateRef} setIsPlaying={setIsPlaying} followedObjectId={followedObjectId} 
+                      selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds}
                     />
                     <TrackingSystem objects={simState?.objects} bodies={bodiesRef.current} offset={offset} zoom={zoom} size={size} onTeleport={handleTeleport} showOffScreenIndicators={!!simState?.showOffScreenIndicators} />
                     <RulerSystem rulerPoints={rulerPoints} setRulerPoints={setRulerPoints} activeTool={activeTool} offset={offset} zoom={zoom} size={size} unitStep={subStep} matterCanvasRef={matterCanvasRef} />
@@ -169,10 +173,23 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
                 )}
               </InteractiveGrid>
 
-              <div className="absolute top-4 right-4 z-40 pointer-events-auto">
-                <Timebar isPlaying={isPlaying} timeScale={timeScale} displayTime={displayTime} onTogglePlay={handleTogglePlay} onRestart={handleRestart} onTimeScaleChange={setTimeScale} onSeek={handleSeek} />
+              {/* Time UI Control - Moved outside InteractiveGrid for reliability */}
+              <div className="absolute top-6 right-6 z-[60] pointer-events-auto">
+                <Timebar 
+                  isPlaying={isPlaying} 
+                  timeScale={timeScale} 
+                  displayTime={displayTime} 
+                  onTogglePlay={handleTogglePlay} 
+                  onRestart={handleRestart} 
+                  onTimeScaleChange={setTimeScale}
+                  onSeek={(val) => {
+                    handleSeek(val);
+                    if (matterCanvasRef.current?.handleSeek) {
+                      matterCanvasRef.current.handleSeek(val);
+                    }
+                  }}
+                />
               </div>
-              <SimulationTimeline isTimelineCollapsed={isTimelineCollapsed} setIsTimelineCollapsed={setIsTimelineCollapsed} isPlaying={isPlaying} displayTime={displayTime} maxTime={maxTime} handleTogglePlay={handleTogglePlay} handleSeek={handleSeek} />
             </div>
           </div>
         </motion.div>

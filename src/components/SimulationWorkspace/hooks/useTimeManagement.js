@@ -5,7 +5,6 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
   const [hasStartedOnce, setHasStartedOnce] = useState(false);
   const [timeScale, setTimeScale] = useState(1);
   const [displayTime, setDisplayTime] = useState(0);
-  const [maxTime, setMaxTime] = useState(0);
   
   const snapshotRef = useRef(null);
   const timeStateRef = useRef({ time: 0, isPlaying: false, timeScale: 1, targetTime: null, totalPhysicsTicks: 0 });
@@ -26,15 +25,6 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
     return () => cancelAnimationFrame(animationFrameId);
   }, []);
 
-  // ทำนายเวลาสิ้นสุด
-  useEffect(() => {
-    if (!matterCanvasRef.current || isPlaying) return;
-    const timer = setTimeout(() => {
-       const predicted = matterCanvasRef.current.predictSimulationTime?.();
-       if (predicted !== undefined) setMaxTime(predicted);
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [simState, isPlaying, matterCanvasRef]);
 
   const handleTogglePlay = useCallback(() => {
     if (!hasStartedOnceRef.current) setHasStartedOnce(true);
@@ -68,20 +58,14 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
     if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
   }, [setSimState, onSaveControlState, matterCanvasRef]);
 
-  const handleSeek = useCallback((val) => {
-    timeStateRef.current.isPlaying = false;
-    setIsPlaying(false);
-    timeStateRef.current.time = val;
-    timeStateRef.current.totalPhysicsTicks = Math.round(val / (1000 / 60 / 1000)); // approx ticks
-    setDisplayTime(val);
-
-    if (matterCanvasRef.current) {
-      matterCanvasRef.current.resetSimulation({ targetTime: val, instant: true });
-    }
-  }, [matterCanvasRef]);
+  const handleSeek = useCallback((targetTime) => {
+    timeStateRef.current.time = targetTime;
+    timeStateRef.current.totalPhysicsTicks = Math.round(targetTime * 60);
+    setDisplayTime(targetTime);
+  }, []);
 
   return {
     isPlaying, setIsPlaying, hasStartedOnce, setHasStartedOnce, timeScale, setTimeScale,
-    displayTime, maxTime, timeStateRef, handleTogglePlay, handleRestart, handleSeek
+    displayTime, timeStateRef, handleTogglePlay, handleRestart, handleSeek
   };
 }

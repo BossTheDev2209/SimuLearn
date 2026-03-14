@@ -13,18 +13,18 @@ export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport
       const body = bodies[obj.id];
       if (!body) return;
 
-      // body.position เป็น world meters (Y-up) แล้ว
+      // body.position เป็น world meters (Y-up)
       const screenX = (body.position.x * PPM_ZOOMED) + (size.w / 2 + offset.x);
       const screenY = (size.h / 2 + offset.y) - (body.position.y * PPM_ZOOMED);
 
-      // คำนวณรัศมีในหน่วยพิกเซล (Screen Pixels)
+      // รัศมีในหน่วยพิกเซล
       const radiusPx = ((obj.size || 1) * PPM_ZOOMED) / 2;
 
-      // ปรับเงื่อนไข: จะโชว์ indicator ก็ต่อเมื่อ "ทั้งวัตถุ" (รวมรัศมี) หลุดออกไปแล้วเท่านั้น
+      // แสดง indicator เมื่อวัตถุทั้งก้อน (รวมรัศมี) หลุดออกนอกจอ
       const isOffScreen =
         screenX + radiusPx < 0 || screenX - radiusPx > size.w ||
         screenY + radiusPx < 0 || screenY - radiusPx > size.h;
-      
+
       if (!isOffScreen) return;
 
       indicators.push({
@@ -40,7 +40,7 @@ export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport
       });
     });
 
-    // Cluster indicators that are close to each other on screen edge
+    // Cluster indicators ที่อยู่ใกล้กันบนขอบจอ
     const clusters = [];
     const used = new Set();
     indicators.forEach((ind, i) => {
@@ -50,7 +50,6 @@ export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport
       for (let j = i + 1; j < indicators.length; j++) {
         const other = indicators[j];
         if (used.has(other.id)) continue;
-        // ✅ เปรียบเทียบระยะห่างระหว่าง edge positions (screen px) ไม่ใช่ camera distance
         const dx = ind.edge.x - other.edge.x;
         const dy = ind.edge.y - other.edge.y;
         if (Math.sqrt(dx * dx + dy * dy) < 60) {
@@ -62,17 +61,17 @@ export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport
     });
 
     return clusters;
-  }, [objects, bodies, offset, zoom, size]);
+  }, [objects, bodies, offset, zoom, size, showOffScreenIndicators]);
 
   if (offScreenIndicators.length === 0) return null;
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-10 font-['Chakra_Petch']">
+    // ✅ z-[400] สูงพอที่จะอยู่เหนือ InteractiveGrid และ MatterCanvas
+    <div className="absolute inset-0 pointer-events-none z-[400] font-['Chakra_Petch']">
       {offScreenIndicators.map(cluster => {
         const lead = cluster[0];
         const isCluster = cluster.length > 1;
 
-        // คำนวณระยะห่างจากกล้องถึงวัตถุ (world meters)
         const PPM_ZOOMED = PIXELS_PER_METER * zoom;
         const camX = -offset.x / PPM_ZOOMED;
         const camY =  offset.y / PPM_ZOOMED;
@@ -84,39 +83,46 @@ export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport
         const avgX = cluster.reduce((sum, item) => sum + item.edge.x, 0) / cluster.length;
         const avgY = cluster.reduce((sum, item) => sum + item.edge.y, 0) / cluster.length;
 
+        // มุมที่ arrow ชี้ไปหาวัตถุ
+        const arrowAngle = Math.atan2(lead.screen.y - avgY, lead.screen.x - avgX);
+
         return (
+          // ✅ ใช้ CSS translate property แทน transform เพื่อไม่ทับ transform ของ child
+          // pointer-events-auto อยู่ที่นี่เพื่อรับคลิก
           <div
             key={lead.id}
+            className="absolute pointer-events-auto cursor-pointer group"
+            style={{ left: avgX, top: avgY, opacity, translate: '-50% -50%' }}
             onClick={(e) => { e.stopPropagation(); onTeleport(lead.pos.x, lead.pos.y); }}
-            className="absolute flex items-center gap-2 pointer-events-auto cursor-pointer group active:scale-95 transition-transform"
-            style={{ left: avgX, top: avgY, opacity, transform: 'translate(-50%, -50%)' }}
           >
-            {/* Directional Arrow */}
-            <div
-              className="w-0 h-0 border-y-[7px] border-y-transparent border-r-[12px] shrink-0 shadow-sm transition-transform group-hover:scale-110"
-              style={{
-                borderRightColor: lead.color,
-                transform: `rotate(${Math.atan2(lead.screen.y - avgY, lead.screen.x - avgX)}rad)`,
-              }}
-            />
+            <div className="flex items-center gap-2 active:scale-95 transition-transform">
 
-            {/* Info Pill */}
-            <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/20 shadow-xl transition-all group-hover:bg-opacity-90 ${isCluster ? 'bg-[#FFB65A] text-gray-900' : 'bg-black/80 text-white'}`}>
-              <div className="flex flex-col leading-tight">
-                <span className="text-[11px] font-bold whitespace-nowrap">
-                  {isCluster ? `${cluster.length} วัตถุ` : lead.name}
-                </span>
-                <span className={`text-[9px] font-bold ${isCluster ? 'text-gray-800/80' : 'text-[#FFB65A]'}`}>
-                  {dist}m
-                </span>
-              </div>
-
-              {/* Teleport Visual Circle */}
+              {/* Directional Arrow — transform อยู่ใน div ของตัวเองไม่กระทบ parent */}
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-inner ${isCluster ? 'bg-black/10' : 'bg-white/10'}`}
-              >
-                <div className={`w-2 h-2 rounded-full border-2 ${isCluster ? 'border-black/60' : 'border-white/80'}`} />
+                className="w-0 h-0 border-y-[7px] border-y-transparent border-r-[12px] shrink-0 shadow-sm transition-transform group-hover:scale-110"
+                style={{
+                  borderRightColor: lead.color,
+                  transform: `rotate(${arrowAngle}rad)`,
+                }}
+              />
+
+              {/* Info Pill */}
+              <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/20 shadow-xl transition-all group-hover:brightness-110 ${isCluster ? 'bg-[#FFB65A] text-gray-900' : 'bg-black/80 text-white'}`}>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-[11px] font-bold whitespace-nowrap">
+                    {isCluster ? `${cluster.length} วัตถุ` : lead.name}
+                  </span>
+                  <span className={`text-[9px] font-bold ${isCluster ? 'text-gray-800/80' : 'text-[#FFB65A]'}`}>
+                    {dist}m
+                  </span>
+                </div>
+
+                {/* Teleport Visual Circle */}
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center shadow-inner transition-all group-hover:scale-110 ${isCluster ? 'bg-black/10' : 'bg-white/10'}`}>
+                  <div className={`w-2 h-2 rounded-full border-2 ${isCluster ? 'border-black/60' : 'border-white/80'}`} />
+                </div>
               </div>
+
             </div>
           </div>
         );

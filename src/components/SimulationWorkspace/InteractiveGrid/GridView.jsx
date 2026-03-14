@@ -103,7 +103,7 @@ const GridView = ({ size, offset, zoom }) => {
           textAnchor={lbl.textAnchor}
           className="fill-gray-500 dark:fill-[#949BA4]"
           fontSize={11}
-          fontFamily="Inter, system-ui, sans-serif"
+          fontFamily="'Chakra Petch', Inter, system-ui, sans-serif"
           style={{ userSelect: 'none', pointerEvents: 'none' }}
         >
           {formatLabel(lbl.val)}

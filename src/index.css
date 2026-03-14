@@ -65,23 +65,25 @@
   100% { background-position: 200% 0; }
 }
 
+/* ✅ ใช้สีทึบแทน rgba โปร่งแสง เพื่อให้มองเห็น shimmer effect */
 .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(120, 120, 120, 0.05) 25%,
-    rgba(120, 120, 120, 0.12) 50%,
-    rgba(120, 120, 120, 0.05) 75%
+    #cec7bf 25%,
+    #ddd6ce 50%,
+    #cec7bf 75%
   );
   background-size: 200% 100%;
-  animation: shimmer 2s infinite linear;
+  animation: shimmer 1.5s infinite linear;
 }
 
+/* ✅ dark mode — สีใกล้เคียง --bg-theme-sidebar: #2B2D31 */
 .dark .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.03) 25%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.03) 75%
+    #35373c 25%,
+    #43464d 50%,
+    #35373c 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite linear;

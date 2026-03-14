@@ -15,6 +15,7 @@ const InteractiveGrid = forwardRef(({
   onGridPointerMove, 
   onGridPointerUp, 
   onGridRightClick,
+  onGridDoubleClick,
   style = {} 
 }, ref) => {
   const containerRef = useRef(null);
@@ -34,6 +35,7 @@ const InteractiveGrid = forwardRef(({
     onGridPointerUp, 
     onGridClick, 
     onGridRightClick,
+    onGridDoubleClick,
     niceStep(100 / (PIXELS_PER_METER * (initialCamera?.zoom || 1))) / 5 // initial subStep
   );
 
@@ -58,7 +60,8 @@ const InteractiveGrid = forwardRef(({
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0"
+      className="absolute inset-0 select-none"
+      onDragStart={(e) => e.preventDefault()}
       style={{ 
         cursor: (activeTool === 'add' || activeTool === 'erase' || activeTool === 'velocity' || activeTool === 'force') 
           ? 'crosshair' 
@@ -70,6 +73,10 @@ const InteractiveGrid = forwardRef(({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onDoubleClick={(e) => {
+        const coords = getSimCoords(e);
+        onGridDoubleClick?.(coords.wx, coords.wy, unitStep);
+      }}
       onContextMenu={(e) => e.preventDefault()}
     >
       <GridView size={size} offset={offset} zoom={zoom} />

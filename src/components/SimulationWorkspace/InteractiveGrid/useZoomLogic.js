@@ -13,6 +13,7 @@ export const useZoomLogic = (
   onGridPointerUp, 
   onGridClick,
   onGridRightClick,
+  onGridDoubleClick,
   unitStep
 ) => {
   const [camera, setCamera] = useState({
@@ -108,7 +109,7 @@ export const useZoomLogic = (
     if (e.button === 2 && onGridRightClick) {
       onGridRightClick(coords.wx, coords.wy, unitStep);
     } else if (e.button === 0 && (activeTool !== 'cursor' || dist < 5) && onGridClick) {
-      onGridClick(coords.wx, coords.wy, unitStep);
+      onGridClick(coords.wx, coords.wy, unitStep, e);
     }
   }, [getSimCoords, onGridPointerUp, activeTool, onGridClick, onGridRightClick, unitStep]);
 

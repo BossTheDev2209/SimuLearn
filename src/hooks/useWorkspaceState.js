@@ -16,6 +16,7 @@ export const useWorkspaceState = () => {
 
   const [followedObjectId, setFollowedObjectId] = useState(null);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const [selectedObjectIds, setSelectedObjectIds] = useState([]); // 🌟 สำหรับ Multi-selection
   const [rulerPoints, setRulerPoints] = useState([]);
   const [isFollowMenuOpen, setIsFollowMenuOpen] = useState(false);
 
@@ -43,7 +44,10 @@ export const useWorkspaceState = () => {
     } else {
       setActiveTool(nextTool);
       setIsFollowMenuOpen(false);
-      if (nextTool !== 'cursor') setSelectedObjectId(null);
+      if (nextTool !== 'cursor') {
+        setSelectedObjectId(null);
+        setSelectedObjectIds([]);
+      }
       if (nextTool !== 'ruler') setRulerPoints([]);
     }
   }, [activeTool, isFollowMenuOpen]);
@@ -57,6 +61,7 @@ export const useWorkspaceState = () => {
     spawnConfig, setSpawnConfig,
     followedObjectId, setFollowedObjectId,
     selectedObjectId, setSelectedObjectId,
+    selectedObjectIds, setSelectedObjectIds,
     rulerPoints, setRulerPoints,
     isFollowMenuOpen, setIsFollowMenuOpen,
     showToast,

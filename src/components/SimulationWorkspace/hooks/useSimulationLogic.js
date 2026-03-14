@@ -14,8 +14,13 @@ export const useSimulationLogic = ({
   activeTool,
   selectedObjectId,
   setSelectedObjectId,
+  selectedObjectIds,
+  setSelectedObjectIds,
+  followedObjectId,
+  setFollowedObjectId,
   rulerPoints,
-  setRulerPoints
+  setRulerPoints,
+  handleTeleport
 }) => {
 
   const handleControlUpdate = useCallback((state) => {
@@ -58,7 +63,8 @@ export const useSimulationLogic = ({
     setIsClearModalOpen(false);
   }, [pushToHistory, simState, controlPanelRef, setIsClearModalOpen]);
 
-  const handleGridClick = useCallback((wx, wy, unitStep = 1) => {
+  const handleGridClick = useCallback((wx, wy, unitStep = 1, e) => {
+    const isShift = e?.shiftKey;
     if (activeTool === 'add') {
       const snapped = simState?.gridSnapping;
       const fx = snapped ? Math.round(wx / unitStep) * unitStep : wx;
@@ -116,16 +122,30 @@ export const useSimulationLogic = ({
           const obj = simState.objects.find(o => o.id === vectorHit.objId);
           if (obj) {
             const values = { ...obj.values };
-            if (vectorHit.isLegacy) {
-              if (vectorHit.type === 'velocity') { delete values.velocity; delete values.angle; }
-              else { delete values.force; delete values.forceAngle; }
-            } else {
-              const key = vectorHit.type === 'velocity' ? 'velocities' : 'forces';
-              const arr = [...(values[key] || [])];
-              arr.splice(vectorHit.index, 1);
-              values[key] = arr;
+            // ถ้าลบ 'netResultant' (ผลรวมสุทธิสีม่วง)
+            if (vectorHit.index === 'netResultant') {
+               const newState = { ...simState, showResultantVector: false };
+               setSimState(newState);
             }
-            controlPanelRef.current.updateObjectValues(vectorHit.objId, values);
+            // ถ้าลบ 'resultant' (ผลรวมแรง/ความเร็ว)
+            else if (vectorHit.index === 'resultant') {
+               const key = vectorHit.type === 'velocity' ? 'velocities' : 'forces';
+               values[key] = [];
+               if (vectorHit.type === 'velocity') { delete values.velocity; delete values.angle; }
+               else { delete values.force; delete values.forceAngle; }
+               controlPanelRef.current.updateObjectValues(vectorHit.objId, values);
+            } else {
+              if (vectorHit.isLegacy) {
+                if (vectorHit.type === 'velocity') { delete values.velocity; delete values.angle; }
+                else { delete values.force; delete values.forceAngle; }
+              } else {
+                const key = vectorHit.type === 'velocity' ? 'velocities' : 'forces';
+                const arr = [...(values[key] || [])];
+                arr.splice(vectorHit.index, 1);
+                values[key] = arr;
+              }
+              controlPanelRef.current.updateObjectValues(vectorHit.objId, values);
+            }
           }
         }
         return;
@@ -152,6 +172,7 @@ export const useSimulationLogic = ({
          if (controlPanelRef.current?.removeObject) {
            controlPanelRef.current.removeObject(targetId);
            if (targetId === selectedObjectId) setSelectedObjectId(null);
+           if (targetId === followedObjectId) setFollowedObjectId(null);
          }
       }
     } else if (activeTool === 'focus') {
@@ -160,9 +181,20 @@ export const useSimulationLogic = ({
     } else if (activeTool === 'cursor') {
       const hitId = matterCanvasRef.current?.findObjectAt(wx, wy);
       if (hitId) {
-        setSelectedObjectId(hitId);
+        if (isShift) {
+          setSelectedObjectIds(prev => {
+            if (prev.includes(hitId)) return prev.filter(id => id !== hitId);
+            return [...prev, hitId];
+          });
+        } else {
+          setSelectedObjectId(hitId);
+          setSelectedObjectIds([hitId]);
+        }
       } else {
-        setSelectedObjectId(null);
+        if (!isShift) {
+          setSelectedObjectId(null);
+          setSelectedObjectIds([]);
+        }
       }
     } else if (activeTool === 'ruler') {
       const snapHit = matterCanvasRef.current?.findSnapPoint(wx, wy);
@@ -177,7 +209,7 @@ export const useSimulationLogic = ({
       pushToHistory(simState);
       setRulerPoints(prev => [...prev, { x: fx, y: fy }]);
     }
-  }, [activeTool, simState, spawnConfig, bodiesRef, showToast, pushToHistory, controlPanelRef, matterCanvasRef, setIsFollowMenuOpen, selectedObjectId, setSelectedObjectId, setRulerPoints]);
+  }, [activeTool, simState, spawnConfig, bodiesRef, showToast, pushToHistory, controlPanelRef, matterCanvasRef, setIsFollowMenuOpen, selectedObjectId, setSelectedObjectId, selectedObjectIds, setSelectedObjectIds, followedObjectId, setFollowedObjectId, setRulerPoints]);
 
   const handleGridRightClick = useCallback((wx, wy, unitStep = 1) => {
     if (activeTool === 'ruler') {
@@ -239,11 +271,21 @@ export const useSimulationLogic = ({
     }
   }, [activeTool, rulerPoints, setRulerPoints]);
 
+  const handleGridDoubleClick = useCallback((wx, wy) => {
+    if (activeTool === 'cursor') {
+      const hitId = matterCanvasRef.current?.findObjectAt(wx, wy);
+      if (!hitId) {
+        handleTeleport?.(0, 0);
+      }
+    }
+  }, [activeTool, handleTeleport, matterCanvasRef]);
+
   return {
     handleControlUpdate,
     updateVectorValue,
     handleClearAllConfirm,
     handleGridClick,
-    handleGridRightClick
+    handleGridRightClick,
+    handleGridDoubleClick
   };
 };

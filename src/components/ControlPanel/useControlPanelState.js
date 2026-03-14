@@ -18,7 +18,7 @@ export function useControlPanelState(initialState, simulationType, onUpdate) {
   const [showTrajectory, setShowTrajectory] = useState(initialState?.showTrajectory ?? true);
   const [gridSnapping, setGridSnapping] = useState(initialState?.gridSnapping ?? false);
   const [showCursorCoords, setShowCursorCoords] = useState(initialState?.showCursorCoords ?? false);
-  const [showResultantVector, setShowResultantVector] = useState(initialState?.showResultantVector ?? true);
+  const [showResultantVector, setShowResultantVector] = useState(initialState?.showResultantVector ?? false);
   const [showOffScreenIndicators, setShowOffScreenIndicators] = useState(initialState?.showOffScreenIndicators ?? true);
   const [groundFriction, setGroundFriction] = useState(initialState?.groundFriction ?? 0);
 

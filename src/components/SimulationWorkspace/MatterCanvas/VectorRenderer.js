@@ -1,8 +1,15 @@
+import { matterToWorld } from './PhysicsEngine';
+
 export const PIXELS_PER_METER = 100;
 
-export const drawArrow = (ctx, toScreen, fromWx, fromWy, toWx, toWy, color, thickness = 2.5, opacity = 1.0) => {
+/**
+ * วาด arrow จาก world coords (meters, Y-up) ไปยัง world coords
+ * toScreen แปลง world meters → screen pixels
+ */
+export const drawArrow = (ctx, toScreen, fromWx, fromWy, toWx, toWy, color, thickness = 2.5, opacity = 1.0, label = null) => {
   const fromPos = toScreen(fromWx, fromWy);
-  const toPos = toScreen(toWx, toWy);
+  const toPos   = toScreen(toWx,   toWy);
+
   const headlen = 10;
   const angle = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
 
@@ -16,76 +23,109 @@ export const drawArrow = (ctx, toScreen, fromWx, fromWy, toWx, toWy, color, thic
   ctx.lineTo(toPos.x - headlen * Math.cos(angle + Math.PI / 6), toPos.y - headlen * Math.sin(angle + Math.PI / 6));
   ctx.strokeStyle = color;
   ctx.lineWidth = thickness;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.stroke();
+
+  // Draw Label
+  if (label) {
+    ctx.font = 'bold 10px "Chakra Petch"';
+    ctx.fillStyle = color;
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.fillText(label, toPos.x + 5, toPos.y - 5);
+  }
   ctx.restore();
 };
 
-export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVector) => {
+/**
+ * วาด velocity และ force vectors ของ object หนึ่งชิ้น
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {function} toScreen - แปลง (worldX, worldY) → screen {x, y}
+ * @param {object} obj - simState object { values: { velocities, forces, ... } }
+ * @param {Matter.Body} body - Matter.js body (position เป็น Matter px, Y-down)
+ * @param {boolean} showResultantVector - แสดง net force สีม่วงหรือไม่
+ * @param {number} gravity - ค่าแรงโน้มถ่วงจาก simState
+ */
+export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVector, gravity = 9.8) => {
   if (!body) return;
 
+  // ✅ แปลง body.position จาก Matter px (Y-down) → world meters (Y-up)
+  // เพราะ toScreen รับ world meters ไม่ใช่ pixels
+  const origin = matterToWorld(body.position.x, body.position.y);
+
+  // รวบรวม velocities
   const vels = [...(obj.values?.velocities || [])];
-  if (obj.values?.velocity) {
-    vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0, offsetX: 0, offsetY: 0 });
+  if (obj.values?.velocity != null) {
+    vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
   }
 
+  // รวบรวม forces
   const forces = [...(obj.values?.forces || [])];
-  if (obj.values?.force) {
-    forces.push({ magnitude: obj.values.force, angle: obj.values.forceAngle || 0, offsetX: 0, offsetY: 0 });
+  if (obj.values?.force != null) {
+    forces.push({ magnitude: obj.values.force, angle: obj.values.forceAngle || 0 });
   }
 
-  const calculateSum = (arr) => {
-    let sx = 0, sy = 0;
-    arr.forEach(a => {
-      sx += a.magnitude * Math.cos((a.angle * Math.PI) / 180);
-      sy += a.magnitude * Math.sin((a.angle * Math.PI) / 180);
-    });
-    return { sx, sy };
-  };
+  if (vels.length === 0 && forces.length === 0) return;
 
-  const vSum = calculateSum(vels);
-  const fSum = calculateSum(forces);
+  // SCALE: 0.05 ม. ต่อ 1 m/s (หรือ 1N) 
+  // เพราะ dragDist 1m ในโลก = magnitude 20 -> 20 * 0.05 = 1m (ขนาดยอมรับได้)
+  const SCALE = 0.05;
 
-  const hasMultipleVels = vels.length > 1;
-  const hasMultipleForces = forces.length > 1;
-
-  // --- A. Velocity (Blue) ---
-  const PIXELS_PER_METER = 100;
+  // ── A. Velocity (Blue) ──────────────────────────────────────────────────
   vels.forEach(v => {
-    const vx = v.magnitude * PIXELS_PER_METER * Math.cos((v.angle * Math.PI) / 180);
-    const vy = v.magnitude * PIXELS_PER_METER * Math.sin((v.angle * Math.PI) / 180);
-    const originX = body.position.x + (v.offsetX || 0) * PIXELS_PER_METER;
-    const originY = body.position.y + (v.offsetY || 0) * PIXELS_PER_METER;
-    drawArrow(ctx, toScreen, originX, originY, originX + vx * 0.2, originY + vy * 0.2, '#3B82F6', 2.5, 0.2);
+    const angleRad = (v.angle * Math.PI) / 180;
+    const ex = origin.x + v.magnitude * Math.cos(angleRad) * SCALE;
+    const ey = origin.y + v.magnitude * Math.sin(angleRad) * SCALE;
+    const color = v.color || '#3B82F6';
+    drawArrow(ctx, toScreen, origin.x, origin.y, ex, ey, color, 2, 0.45, v.name);
   });
-  if (vels.length > 0) {
-    const vsx = vSum.sx * PIXELS_PER_METER;
-    const vsy = vSum.sy * PIXELS_PER_METER;
-    // Resultant Velocity is BLUE
-    drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + vsx * 0.2, body.position.y + vsy * 0.2, '#3B82F6', 3.5, 1.0);
+  
+  // Resultant velocity
+  if (vels.length > 1 || (vels.length === 1 && vels[0].isLegacy)) {
+    let sx = 0, sy = 0;
+    vels.forEach(v => {
+      sx += v.magnitude * Math.cos((v.angle * Math.PI) / 180);
+      sy += v.magnitude * Math.sin((v.angle * Math.PI) / 180);
+    });
+    if (Math.abs(sx) > 0.001 || Math.abs(sy) > 0.001) {
+      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + sx * SCALE, origin.y + sy * SCALE, '#3B82F6', 3.5, 1.0, 'Σv');
+    }
   }
 
-  // --- B. Force (Red) ---
+  // ── B. Force (Red) ──────────────────────────────────────────────────────
   forces.forEach(f => {
-    const fx = f.magnitude * PIXELS_PER_METER * Math.cos((f.angle * Math.PI) / 180);
-    const fy = f.magnitude * PIXELS_PER_METER * Math.sin((f.angle * Math.PI) / 180);
-    const originX = body.position.x + (f.offsetX || 0) * PIXELS_PER_METER;
-    const originY = body.position.y + (f.offsetY || 0) * PIXELS_PER_METER;
-    drawArrow(ctx, toScreen, originX, originY, originX + fx * 0.2, originY + fy * 0.2, '#EF4444', 2.5, 0.2);
+    const angleRad = (f.angle * Math.PI) / 180;
+    const ex = origin.x + f.magnitude * Math.cos(angleRad) * SCALE;
+    const ey = origin.y + f.magnitude * Math.sin(angleRad) * SCALE;
+    const color = f.color || '#EF4444';
+    drawArrow(ctx, toScreen, origin.x, origin.y, ex, ey, color, 2, 0.45, f.name);
   });
-  if (forces.length > 0) {
-    const fsx = fSum.sx * PIXELS_PER_METER;
-    const fsy = fSum.sy * PIXELS_PER_METER;
-    // Resultant Force (of this object) is RED
-    drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + fsx * 0.2, body.position.y + fsy * 0.2, '#EF4444', 3.5, 1.0);
+  
+  // Resultant force (manual only)
+  let fsx = 0, fsy = 0;
+  forces.forEach(f => {
+    fsx += f.magnitude * Math.cos((f.angle * Math.PI) / 180);
+    fsy += f.magnitude * Math.sin((f.angle * Math.PI) / 180);
+  });
+
+  if (forces.length > 1 || (forces.length === 1 && forces[0].isLegacy)) {
+    if (Math.abs(fsx) > 0.001 || Math.abs(fsy) > 0.001) {
+      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + fsx * SCALE, origin.y + fsy * SCALE, '#EF4444', 3.5, 1.0, 'ΣF_ext');
+    }
   }
 
-  // --- C. Net Force (Purple) ---
-  // RESERVED strictly for the total summation of ALL forces when explicitly requested
+  // ── C. Net Force (Purple) — แสดงเมื่อ showResultantVector = true ──
   if (showResultantVector) {
-    const fsx = fSum.sx * PIXELS_PER_METER;
-    const fsy = fSum.sy * PIXELS_PER_METER;
-    if (Math.abs(fsx) > 1 || Math.abs(fsy) > 1) {
-      drawArrow(ctx, toScreen, body.position.x, body.position.y, body.position.x + fsx * 0.2, body.position.y + fsy * 0.2, '#A855F7', 4.5);
+    const mass = obj.values?.mass ?? 1.0;
+    const weight = mass * gravity;
+    const netX = fsx;
+    const netY = fsy - weight;
+
+    if (Math.abs(netX) > 0.001 || Math.abs(netY) > 0.001) {
+      // ใช้ความหนามากกว่า เพื่อแยกแยะ
+      drawArrow(ctx, toScreen, origin.x, origin.y, origin.x + netX * SCALE, origin.y + netY * SCALE, '#A855F7', 4.5, 1.0, 'ΣF_net');
     }
   }
 };

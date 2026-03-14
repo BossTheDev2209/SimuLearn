@@ -14,7 +14,7 @@ export default function Sidebar({
   onSettingsClick,
   userName,
   onLogout,
-  isHistoryLoading // 🌟 รับ Prop นี้เข้ามา
+  isHistoryLoading
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
@@ -51,7 +51,7 @@ export default function Sidebar({
   useEffect(() => {
     if (toastMessage) {
       const timer = setTimeout(() => setToastMessage(null), 2000);
-      return () => setTimeout(timer);
+      return () => clearTimeout(timer); // ✅ แก้จาก setTimeout เป็น clearTimeout
     }
   }, [toastMessage]);
 
@@ -84,7 +84,7 @@ export default function Sidebar({
     <div className={`${isOpen ? 'w-[240px]' : 'w-[64px]'} bg-theme-sidebar flex flex-col justify-between border-r border-theme-border h-full z-10 transition-all duration-300 flex-shrink-0 overflow-hidden`}>
       <div className={`p-4 ${!isOpen && 'px-2'} flex flex-col items-center flex-1 overflow-hidden`}>
         
-        {/* 🔹 ส่วนหัวโลโก้ และปุ่มยืดหด */}
+        {/* ส่วนหัวโลโก้ และปุ่มยืดหด */}
         <div className={`flex items-center w-full ${isOpen ? 'justify-between' : 'justify-center'} mb-8 mt-2`}>
           {isOpen && (
              <div className="flex items-center">
@@ -101,7 +101,7 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* 🔹 ปุ่มสร้างใหม่ / ค้นหา */}
+        {/* ปุ่มสร้างใหม่ / ค้นหา */}
         <div className="space-y-2 mb-8 w-full">
           <button onClick={onNewSimulation} title="แบบจำลองใหม่" className={`flex items-center ${isOpen ? 'gap-3 px-3 py-2 w-full text-left' : 'justify-center w-full p-2'} text-[14px] text-theme-primary font-bold hover:bg-theme-hover rounded-lg transition cursor-pointer`}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -113,53 +113,97 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* 🔹 ส่วนประวัติ (โชว์เฉพาะตอน Sidebar เปิด) */}
+        {/* ส่วนประวัติ */}
         {isOpen && (
           <div className="w-full px-2 mt-2 flex-1 overflow-hidden flex flex-col">
             <button onClick={() => setIsHistoryOpen(!isHistoryOpen)} className="w-full flex items-center justify-between text-[13px] font-bold text-theme-primary mb-3 px-2 py-1 group shrink-0">
               <span className="whitespace-nowrap">แบบจำลองของคุณ</span>
               <span className="text-theme-muted hover:text-theme-primary transition flex items-center justify-center w-7 h-7 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
-                {isHistoryOpen ? <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>}
+                {isHistoryOpen
+                  ? <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                  : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                }
               </span>
             </button>
 
             <div className={`overflow-hidden transition-all duration-300 flex-1 ${isHistoryOpen ? 'max-h-full opacity-100' : 'max-h-0 opacity-0'}`}>
               <ul className="space-y-[2px] text-[14px] font-medium h-full overflow-y-auto custom-scrollbar" ref={menuRef}>
                 
-                {/* 🌟 แสดง Skeleton ตอนกำลังโหลด — shimmer animation */}
+                {/* ✅ Skeleton — แสดงตอน isHistoryLoading = true */}
                 {isHistoryLoading ? (
-                  <div className="flex flex-col gap-1 mt-1 px-1">
+                  <li className="flex flex-col gap-1 mt-1 px-1">
                     {[75, 55, 90, 45, 65].map((w, i) => (
-                      <div key={i} className="flex items-center h-10 px-3 rounded-lg mb-1">
+                      <div key={i} className="flex items-center h-10 px-3 rounded-lg">
                         <div className="w-5 h-5 rounded-full skeleton-shimmer shrink-0" />
-                        <div className="h-3.5 skeleton-shimmer rounded-full ml-3" style={{ width: `${w}%` }} />
+                        <div
+                          className="h-3.5 skeleton-shimmer rounded-full ml-3"
+                          style={{ width: `${w}%` }}
+                        />
                       </div>
                     ))}
-                  </div>
+                  </li>
                 ) : simulations.length === 0 ? (
                   <li className="px-2 py-3 text-[13px] text-theme-muted italic text-center">ยังไม่มีแบบจำลอง</li>
                 ) : (
                   simulations.map((sim, index) => (
-                    <li key={sim.id} onClick={() => { if (renamingId !== sim.id) onSelectSimulation(sim.id); }} className={`group/item relative cursor-pointer rounded-lg px-2 py-2 transition-colors duration-200 flex items-center justify-between ${activeSimId === sim.id ? 'bg-[#FFB65A] text-gray-900 dark:bg-theme-hover dark:text-white font-bold' : activeMenu === index ? 'bg-theme-hover text-theme-primary' : 'text-theme-secondary hover:bg-theme-hover hover:text-theme-primary'}`}>
+                    <li
+                      key={sim.id}
+                      onClick={() => { if (renamingId !== sim.id) onSelectSimulation(sim.id); }}
+                      className={`group/item relative cursor-pointer rounded-lg px-2 py-2 transition-colors duration-200 flex items-center justify-between ${
+                        activeSimId === sim.id
+                          ? 'bg-[#FFB65A] text-gray-900 dark:bg-theme-hover dark:text-white font-bold'
+                          : activeMenu === index
+                          ? 'bg-theme-hover text-theme-primary'
+                          : 'text-theme-secondary hover:bg-theme-hover hover:text-theme-primary'
+                      }`}
+                    >
                       {renamingId === sim.id ? (
-                        <input ref={renameInputRef} type="text" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmRename(); if (e.key === 'Escape') handleCancelRename(); }} onBlur={handleConfirmRename} onClick={(e) => e.stopPropagation()} className="flex-1 mr-1 bg-theme-main text-theme-primary text-[14px] font-medium rounded px-1.5 py-0.5 outline-none border border-theme-border-hover focus:border-[#FFB65A]" />
-                      ) : ( 
-                        <span className="truncate flex-1 mr-1">{sim.title}</span> 
+                        <input
+                          ref={renameInputRef}
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleConfirmRename();
+                            if (e.key === 'Escape') handleCancelRename();
+                          }}
+                          onBlur={handleConfirmRename}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 mr-1 bg-theme-main text-theme-primary text-[14px] font-medium rounded px-1.5 py-0.5 outline-none border border-theme-border focus:border-[#FFB65A]"
+                        />
+                      ) : (
+                        <span className="truncate flex-1 mr-1">{sim.title}</span>
                       )}
 
                       {renamingId !== sim.id && (
-                        <button onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === index ? null : index); }} className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all cursor-pointer ${activeMenu === index ? 'opacity-100 bg-black/10 dark:bg-white/10 text-theme-primary' : 'opacity-0 group-hover/item:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 text-theme-muted hover:text-theme-primary'}`}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === index ? null : index); }}
+                          className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all cursor-pointer ${
+                            activeMenu === index
+                              ? 'opacity-100 bg-black/10 dark:bg-white/10 text-theme-primary'
+                              : 'opacity-0 group-hover/item:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 text-theme-muted hover:text-theme-primary'
+                          }`}
+                        >
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                         </button>
                       )}
 
-                      {/* Dropdown ประวัติแชท */}
+                      {/* Dropdown */}
                       {activeMenu === index && (
                         <div className="absolute right-0 top-full mt-1 w-[170px] bg-theme-panel border border-theme-border rounded-xl shadow-xl z-50 py-1.5 text-[13px] font-medium overflow-hidden">
-                          <button onClick={(e) => { e.stopPropagation(); handleShare(sim); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-theme-primary hover:bg-theme-hover transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></svg><span>แชร์</span></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleStartRename(sim); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-theme-primary hover:bg-theme-hover transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg><span>เปลี่ยนชื่อ</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleShare(sim); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-theme-primary hover:bg-theme-hover transition-colors cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></svg>
+                            <span>แชร์</span>
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleStartRename(sim); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-theme-primary hover:bg-theme-hover transition-colors cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+                            <span>เปลี่ยนชื่อ</span>
+                          </button>
                           <div className="my-1 mx-3 border-t border-theme-border"></div>
-                          <button onClick={(e) => { e.stopPropagation(); onDeleteSimulation(sim.id); setActiveMenu(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[#FFB65A] hover:bg-[#FFB65A]/10 dark:hover:bg-[#FFB65A]/20 transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>ลบประวัติ</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); onDeleteSimulation(sim.id); setActiveMenu(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[#FFB65A] hover:bg-[#FFB65A]/10 dark:hover:bg-[#FFB65A]/20 transition-colors cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            <span>ลบประวัติ</span>
+                          </button>
                         </div>
                       )}
                     </li>
@@ -171,14 +215,14 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* 🔹 Toast Message (แจ้งเตือนแชร์) */}
+      {/* Toast Message */}
       {toastMessage && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-20 bg-theme-panel border border-theme-border text-theme-primary text-[13px] font-medium px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in whitespace-nowrap">
           {toastMessage}
         </div>
       )}
 
-      {/* 🔹 ส่วนโปรไฟล์ผู้ใช้ และตั้งค่า */}
+      {/* โปรไฟล์ผู้ใช้ */}
       <div 
         ref={profileRef}
         className={`p-4 flex items-center justify-between ${isOpen ? 'border-t border-theme-border' : 'justify-center border-t border-theme-border pt-4 mb-2'} shrink-0 relative`}
@@ -200,14 +244,14 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* 🔹 Popup ตั้งค่าโปรไฟล์ */}
+        {/* Popup ตั้งค่าโปรไฟล์ */}
         {isProfileMenuOpen && (
           <div className={`absolute ${isOpen ? 'left-4 w-[200px]' : 'left-full ml-4 w-[170px]'} bottom-[calc(100%-8px)] bg-theme-panel border border-theme-border rounded-xl shadow-xl z-50 py-1.5 text-[13px] font-medium overflow-hidden`}>
             <button 
               onClick={(e) => { e.stopPropagation(); setIsProfileMenuOpen(false); onSettingsClick?.(); }}
               className="mx-1 w-[calc(100%-8px)] flex items-center gap-3 px-3 py-2.5 text-theme-primary hover:bg-theme-hover rounded-lg transition-colors cursor-pointer"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-settings">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/>
                 <circle cx="12" cy="12" r="3"/>
               </svg>

@@ -1,13 +1,14 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, memo } from 'react';
 import Matter from 'matter-js';
 import { PIXELS_PER_METER, renderObjectVectors, drawArrow } from './VectorRenderer';
-import { createPhysicsEngine, createGround, updatePhysics, predictSimulationTime, worldToMatter, matterToWorld, computeGravityY } from './PhysicsEngine';
+import { createPhysicsEngine, createGround, updatePhysics, worldToMatter, matterToWorld, computeGravityY } from './PhysicsEngine';
 
 const MatterCanvas = forwardRef(({ 
   size, offset, zoom, unitStep, simState, onPhysicsChange, 
   activeTool, spawnConfig, gridSnapping, showCursorCoords, 
-  showResultantVector, timeStateRef, setIsPlaying, maxTime,
-  followedObjectId, selectedObjectId
+  showResultantVector, timeStateRef, setIsPlaying,
+  followedObjectId, selectedObjectId, selectedObjectIds,
+  controlPanelRef, 
 }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
@@ -19,20 +20,19 @@ const MatterCanvas = forwardRef(({
   const [simSyncToken, setSimSyncToken] = useState(0);
   const pendingActionRef = useRef(null);
 
-  // ✅ เพิ่ม onPhysicsChange เข้า loopPropsRef เพื่อให้ render loop เข้าถึงได้
   const loopPropsRef = useRef({});
   useEffect(() => {
     loopPropsRef.current = { 
       simState, gridSnapping, showCursorCoords, showResultantVector, 
-      activeTool, spawnConfig, maxTime, size, offset, zoom, unitStep,
-      followedObjectId, selectedObjectId,
-      onPhysicsChange, // ✅ เพิ่มตรงนี้
+      activeTool, spawnConfig, size, offset, zoom, unitStep,
+      followedObjectId, selectedObjectId, selectedObjectIds,
+      onPhysicsChange,
     };
   }, [simState, gridSnapping, showCursorCoords, showResultantVector,
-      activeTool, spawnConfig, maxTime, size, offset, zoom, unitStep,
-      followedObjectId, selectedObjectId, onPhysicsChange]); // ✅ เพิ่มใน dependency array
+      activeTool, spawnConfig, size, offset, zoom, unitStep,
+      followedObjectId, selectedObjectId, selectedObjectIds, onPhysicsChange]);
 
-  // Imperative API for Parent
+  // ── Imperative API ───────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     resetSimulation: (pendingAction) => {
       pendingActionRef.current = pendingAction || null;
@@ -41,47 +41,73 @@ const MatterCanvas = forwardRef(({
 
     findVectorAt: (wx, wy) => {
       if (!simState?.objects) return null;
-
+      const SCALE = 0.05;
       for (const obj of simState.objects) {
         if (!obj.isSpawned) continue;
         const body = bodyMap.current.get(obj.id);
         if (!body) continue;
-
-        const worldPos = matterToWorld(body.position.x, body.position.y);
-        const bx = worldPos.x;
-        const by = worldPos.y;
+        const wp = matterToWorld(body.position.x, body.position.y);
 
         const vels = [...(obj.values?.velocities || [])];
         if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0, isLegacy: true });
-
+        
+        let vxSum = 0, vySum = 0;
         for (let i = 0; i < vels.length; i++) {
           const v = vels[i];
-          const headX = bx + v.magnitude * Math.cos((v.angle * Math.PI) / 180) * 0.2;
-          const headY = by + v.magnitude * Math.sin((v.angle * Math.PI) / 180) * 0.2;
-          const dist = Math.sqrt((wx - headX) ** 2 + (wy - headY) ** 2);
-          if (dist < 0.5) {
-            return { objId: obj.id, type: 'velocity', index: v.isLegacy ? null : i, isLegacy: !!v.isLegacy };
-          }
+          const angleRad = (v.angle * Math.PI) / 180;
+          const hx = wp.x + v.magnitude * Math.cos(angleRad) * SCALE;
+          const hy = wp.y + v.magnitude * Math.sin(angleRad) * SCALE;
+          if (Math.sqrt((wx - hx) ** 2 + (wy - hy) ** 2) < 0.5)
+            return { objId: obj.id, type: 'velocity', index: v.isLegacy ? null : i, isLegacy: !!v.isLegacy, name: v.name, color: v.color || '#3B82F6', magnitude: v.magnitude, angle: v.angle };
+          vxSum += v.magnitude * Math.cos(angleRad);
+          vySum += v.magnitude * Math.sin(angleRad);
+        }
+        // Resultant Velocity head
+        const vMag = Math.sqrt(vxSum**2 + vySum**2);
+        if (vMag > 0.001) {
+          const vhx = wp.x + vxSum * SCALE;
+          const vhy = wp.y + vySum * SCALE;
+          if (Math.sqrt((wx - vhx) ** 2 + (wy - vhy) ** 2) < 0.5)
+            return { objId: obj.id, type: 'velocity', index: 'resultant' };
         }
 
         const forces = [...(obj.values?.forces || [])];
         if (obj.values?.force) forces.push({ magnitude: obj.values.force, angle: obj.values.forceAngle || 0, isLegacy: true });
-
+        
+        let fxSum = 0, fySum = 0;
         for (let i = 0; i < forces.length; i++) {
           const f = forces[i];
-          const headX = bx + f.magnitude * Math.cos((f.angle * Math.PI) / 180) * 0.2;
-          const headY = by + f.magnitude * Math.sin((f.angle * Math.PI) / 180) * 0.2;
-          const dist = Math.sqrt((wx - headX) ** 2 + (wy - headY) ** 2);
-          if (dist < 0.5) {
-            return { objId: obj.id, type: 'force', index: f.isLegacy ? null : i, isLegacy: !!f.isLegacy };
+          const angleRad = (f.angle * Math.PI) / 180;
+          const hx = wp.x + f.magnitude * Math.cos(angleRad) * SCALE;
+          const hy = wp.y + f.magnitude * Math.sin(angleRad) * SCALE;
+          if (Math.sqrt((wx - hx) ** 2 + (wy - hy) ** 2) < 0.5)
+            return { objId: obj.id, type: 'force', index: f.isLegacy ? null : i, isLegacy: !!f.isLegacy, name: f.name, color: f.color || '#EF4444', magnitude: f.magnitude, angle: f.angle };
+          fxSum += f.magnitude * Math.cos(angleRad);
+          fySum += f.magnitude * Math.sin(angleRad);
+        }
+        // Resultant Force head (Red)
+        const fMag = Math.sqrt(fxSum**2 + fySum**2);
+        if (fMag > 0.001) {
+          const fhx = wp.x + fxSum * SCALE;
+          const fhy = wp.y + fySum * SCALE;
+          if (Math.sqrt((wx - fhx) ** 2 + (wy - fhy) ** 2) < 0.5)
+            return { objId: obj.id, type: 'force', index: 'resultant' };
+        }
+        // Net Force head (Purple)
+        if (simState?.showResultantVector) {
+          const weight = (obj.values?.mass ?? 1.0) * (simState.gravity || 9.8);
+          const netX = fxSum;
+          const netY = fySum - weight;
+          const nMag = Math.sqrt(netX**2 + netY**2);
+          if (nMag > 0.001) {
+            const nhx = wp.x + netX * SCALE;
+            const nhy = wp.y + netY * SCALE;
+            if (Math.sqrt((wx - nhx) ** 2 + (wy - nhy) ** 2) < 0.5)
+              return { objId: obj.id, type: 'force', index: 'netResultant' };
           }
         }
       }
       return null;
-    },
-
-    predictSimulationTime: () => {
-      return predictSimulationTime(simState);
     },
 
     findSnapPoint: (wx, wy) => {
@@ -93,16 +119,12 @@ const MatterCanvas = forwardRef(({
         const wp = matterToWorld(body.position.x, body.position.y);
         const dCenter = Math.sqrt((wx - wp.x) ** 2 + (wy - wp.y) ** 2);
         if (dCenter < minDist) { minDist = dCenter; bestPoint = { x: wp.x, y: wp.y }; }
-        
         if (body.label === 'circle') {
           const radiusM = body.circleRadius / PIXELS_PER_METER;
           const angle = Math.atan2(wy - wp.y, wx - wp.x);
-          const circumferencePoint = {
-            x: wp.x + radiusM * Math.cos(angle),
-            y: wp.y + radiusM * Math.sin(angle)
-          };
-          const dCircle = Math.sqrt((wx - circumferencePoint.x) ** 2 + (wy - circumferencePoint.y) ** 2);
-          if (dCircle < minDist) { minDist = dCircle; bestPoint = circumferencePoint; }
+          const cp = { x: wp.x + radiusM * Math.cos(angle), y: wp.y + radiusM * Math.sin(angle) };
+          const dC = Math.sqrt((wx - cp.x) ** 2 + (wy - cp.y) ** 2);
+          if (dC < minDist) { minDist = dC; bestPoint = cp; }
         } else {
           for (const v of body.vertices) {
             const wv = matterToWorld(v.x, v.y);
@@ -116,7 +138,7 @@ const MatterCanvas = forwardRef(({
 
     startVectorDrag: (wx, wy, tool, rawX, rawY) => {
       const engine = engineRef.current;
-      if (!engine) return;
+      if (!engine) return false;
       const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground' && !b.isStatic);
       const { x: mx, y: my } = worldToMatter(rawX, rawY);
       let hit = Matter.Query.point(bodies, { x: mx, y: my });
@@ -125,8 +147,7 @@ const MatterCanvas = forwardRef(({
         hit = Matter.Query.point(bodies, { x: mx2, y: my2 });
       }
       if (hit.length) {
-        const body = hit[0];
-        const objId = [...bodyMap.current.entries()].find(([, b]) => b === body)?.[0];
+        const objId = [...bodyMap.current.entries()].find(([, b]) => b === hit[0])?.[0];
         if (objId) {
           drawingVectorRef.current = { type: tool, objId, startX: wx, startY: wy, currentX: wx, currentY: wy };
           return true;
@@ -136,10 +157,7 @@ const MatterCanvas = forwardRef(({
     },
 
     moveVectorDrag: (wx, wy) => {
-      if (drawingVectorRef.current) {
-        drawingVectorRef.current.currentX = wx;
-        drawingVectorRef.current.currentY = wy;
-      }
+      if (drawingVectorRef.current) { drawingVectorRef.current.currentX = wx; drawingVectorRef.current.currentY = wy; }
     },
 
     endVectorDrag: (wx, wy) => {
@@ -147,80 +165,70 @@ const MatterCanvas = forwardRef(({
       if (v) { v.currentX = wx; v.currentY = wy; drawingVectorRef.current = null; return v; }
       return null;
     },
-    
+
     findObjectAt: (wx, wy) => {
       const engine = engineRef.current;
       if (!engine) return null;
-      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground');
       const { x: mx, y: my } = worldToMatter(wx, wy);
-      const hit = Matter.Query.point(bodies, { x: mx, y: my });
-      if (hit.length) {
-        const body = hit[0];
-        const objId = [...bodyMap.current.entries()].find(([, b]) => b === body)?.[0];
-        return objId || null;
-      }
-      return null;
+      const hit = Matter.Query.point(
+        Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground'),
+        { x: mx, y: my }
+      );
+      return hit.length ? ([...bodyMap.current.entries()].find(([, b]) => b === hit[0])?.[0] || null) : null;
     },
 
     teleportObject: (id, wx, wy) => {
       const body = bodyMap.current.get(id);
       if (!body) return;
-      const { x: mx, y: my } = worldToMatter(wx, wy);
+      
+      // ✅ Anti-Noclip: ป้องกันการลากลงพื้น
+      const minWorldY = (body.plugin?.size || 1) / 2;
+      const clampedWy = Math.max(minWorldY, wy);
+
+      const { x: mx, y: my } = worldToMatter(wx, clampedWy);
       Matter.Body.setPosition(body, { x: mx, y: my });
       Matter.Body.setVelocity(body, { x: 0, y: 0 });
-      if (controlPanelRef.current?.updateObjectValues) {
-        controlPanelRef.current.updateObjectValues(id, { height: wy });
+      if (controlPanelRef?.current?.updateObjectValues) {
+        controlPanelRef.current.updateObjectValues(id, { height: clampedWy });
       }
     },
 
     findRotationHandle: (wx, wy) => {
-      if (activeTool !== 'cursor' || !selectedObjectId) return null;
+      if (!selectedObjectId) return null;
       const body = bodyMap.current.get(selectedObjectId);
       if (!body || body.label === 'circle') return null;
-
       const wp = matterToWorld(body.position.x, body.position.y);
       const radiusM = (body.plugin?.size || 1) / 2;
       const handleDist = radiusM + 0.5;
-      
-      // Handle position in world coords
-      const hx = wp.x + handleDist * Math.cos(body.angle - Math.PI/2);
-      const hy = wp.y - handleDist * Math.sin(body.angle - Math.PI/2);
-
-      const d = Math.sqrt((wx - hx)**2 + (wy - hy)**2);
-      if (d < 0.4) return selectedObjectId;
-      return null;
-    },
-
-    checkCollision: (wx, wy, size, shape) => {
-      const engine = engineRef.current;
-      if (!engine) return false;
-      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground');
-      const { x: px, y: py } = worldToMatter(wx, wy);
-      const radiusPx = (size * PIXELS_PER_METER) / 2;
-      
-      let tempBody;
-      if (shape === 'circle') {
-        tempBody = Matter.Bodies.circle(px, py, radiusPx);
-      } else if (shape === 'polygon-3') {
-        // We use circumcircle radius for polygon check
-        tempBody = Matter.Bodies.polygon(px, py, 3, radiusPx / (Math.sqrt(3)/2));
-      } else {
-        tempBody = Matter.Bodies.rectangle(px, py, radiusPx * 2, radiusPx * 2);
-      }
-      
-      const collisions = Matter.Query.collides(tempBody, bodies);
-      return collisions.length > 0;
+      const hx = wp.x + handleDist * Math.cos(body.angle - Math.PI / 2);
+      const hy = wp.y - handleDist * Math.sin(body.angle - Math.PI / 2);
+      return Math.sqrt((wx - hx) ** 2 + (wy - hy) ** 2) < 0.4 ? selectedObjectId : null;
     },
 
     setObjectRotation: (id, angleRad) => {
       const body = bodyMap.current.get(id);
       if (!body) return;
       Matter.Body.setAngle(body, angleRad);
-      if (controlPanelRef.current?.updateObjectValues) {
-        // We might want to store angle in degrees for the UI
-        const deg = Math.round((angleRad * 180 / Math.PI) * 10) / 10;
-        controlPanelRef.current.updateObjectValues(id, { angle: deg });
+      if (controlPanelRef?.current?.updateObjectValues) {
+        controlPanelRef.current.updateObjectValues(id, { angle: Math.round((angleRad * 180 / Math.PI) * 10) / 10 });
       }
+    },
+    checkCollision: (wx, wy, size, shape) => {
+      const engine = engineRef.current;
+      if (!engine) return false;
+      const bodies = Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground');
+      const { x: px, y: py } = worldToMatter(wx, wy);
+      const radiusPx = (size * PIXELS_PER_METER) / 2;
+      let tempBody;
+      if (shape === 'circle') tempBody = Matter.Bodies.circle(px, py, radiusPx);
+      else if (shape === 'polygon-3') tempBody = Matter.Bodies.polygon(px, py, 3, radiusPx / (Math.sqrt(3) / 2));
+      else tempBody = Matter.Bodies.rectangle(px, py, radiusPx * 2, radiusPx * 2);
+      return Matter.Query.collides(tempBody, bodies).length > 0;
+    },
+
+    handleSeek: (val) => {
+      timeStateRef.current.time = val;
+      timeStateRef.current.totalPhysicsTicks = Math.round(val * 60);
     }
   }));
 
@@ -235,14 +243,12 @@ const MatterCanvas = forwardRef(({
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Main Effect: Engine Creation and Render Loop
+  // ── Main Render Loop ─────────────────────────────────────────────────────
   useEffect(() => {
     const engine = createPhysicsEngine();
     engineRef.current = engine;
     bodyMap.current.clear();
-
-    const ground = createGround();
-    Matter.Composite.add(engine.world, ground);
+    Matter.Composite.add(engine.world, createGround());
     setSimSyncToken(v => v + 1);
 
     let raf;
@@ -257,238 +263,173 @@ const MatterCanvas = forwardRef(({
       if (timeStateRef.current?.isPlaying) {
         accumulator += delta * (timeStateRef.current.timeScale || 1);
         while (accumulator >= FIXED_DELTA_MS) {
-          updatePhysics(
-            engine,
-            FIXED_DELTA_MS,
-            loopPropsRef.current.simState,
-            bodyMap.current,
-            loopPropsRef.current.maxTime,
-            timeStateRef.current,
-            setIsPlaying
-          );
+          updatePhysics(engine, FIXED_DELTA_MS, loopPropsRef.current.simState, bodyMap.current, timeStateRef.current, setIsPlaying);
           if (timeStateRef.current) {
-            timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
-            timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
+            timeStateRef.current.time += FIXED_DELTA_MS / 1000;
           }
           accumulator -= FIXED_DELTA_MS;
         }
       }
 
-      // ✅ ส่ง bodies กลับให้ useCameraEngine ทุก frame
-      // แปลงจาก Matter px → world meters ก่อนส่ง
+      // ✅ ส่ง world-meter bodies กลับให้ useCameraEngine
       if (loopPropsRef.current.onPhysicsChange) {
         const worldBodies = {};
         for (const [id, body] of bodyMap.current) {
-          worldBodies[id] = {
-            position: matterToWorld(body.position.x, body.position.y),
-          };
+          worldBodies[id] = { position: matterToWorld(body.position.x, body.position.y) };
         }
         loopPropsRef.current.onPhysicsChange(worldBodies, timeStateRef.current?.isPlaying);
       }
 
-      // ── Draw ──────────────────────────────────────────────────────────
+      // ── Draw ────────────────────────────────────────────────────────────
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext('2d');
-      if (ctx) {
-        const {
-          size, offset, zoom,
-          showCursorCoords, showResultantVector,
-          gridSnapping, unitStep, activeTool, spawnConfig
-        } = loopPropsRef.current;
+      if (!ctx) { raf = requestAnimationFrame(loop); return; }
 
-        ctx.clearRect(0, 0, size.w, size.h);
+      const { size, offset, zoom, showCursorCoords, showResultantVector, gridSnapping, unitStep, activeTool, spawnConfig, simState: loopSimState, selectedObjectId: loopSelectedId, selectedObjectIds: loopSelectedIds } = loopPropsRef.current;
+      ctx.clearRect(0, 0, size.w, size.h);
 
-        const PPM_ZOOMED = PIXELS_PER_METER * zoom;
-        const ox = size.w / 2 + offset.x;
-        const oy = size.h / 2 + offset.y;
+      const PPM_ZOOMED = PIXELS_PER_METER * zoom;
+      const ox = size.w / 2 + offset.x;
+      const oy = size.h / 2 + offset.y;
+      const toScreen = (wx, wy) => ({ x: ox + wx * PPM_ZOOMED, y: oy - wy * PPM_ZOOMED });
 
-        // toScreen: world meters (Y-up) → screen pixels
-        const toScreen = (wx, wy) => ({
-          x: ox + wx * PPM_ZOOMED,
-          y: oy - wy * PPM_ZOOMED,
-        });
+      // Draw Bodies
+      Matter.Composite.allBodies(engine.world).forEach(body => {
+        if (body.label === 'ground') return;
+        const objId = [...bodyMap.current.entries()].find(([, b]) => b === body)?.[0];
+        const worldPos = matterToWorld(body.position.x, body.position.y);
+        const radiusM = (body.circleRadius ?? (body.plugin?.size / 2)) / PIXELS_PER_METER;
 
-        // Draw Bodies
-        Matter.Composite.allBodies(engine.world).forEach(body => {
-          if (body.label === 'ground') return;
+        ctx.beginPath();
+        if (body.label === 'circle') {
+          const c = toScreen(worldPos.x, worldPos.y);
+          ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED, 0, 2 * Math.PI);
+        } else {
+          const verts = body.vertices.map(v => matterToWorld(v.x, v.y));
+          const first = toScreen(verts[0].x, verts[0].y);
+          ctx.moveTo(first.x, first.y);
+          for (let i = 1; i < verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); }
+        }
+        ctx.closePath();
+        ctx.fillStyle = (body.render?.fillStyle || '#999999') + 'CC';
+        ctx.fill();
+        ctx.strokeStyle = body.render?.fillStyle;
+        ctx.lineWidth = 2;
+        ctx.stroke();
 
-          const worldPos = matterToWorld(body.position.x, body.position.y);
-          const radiusM = (body.circleRadius ?? (body.plugin?.size / 2)) / PIXELS_PER_METER;
-
+        // Follow Ring
+        if (loopPropsRef.current.followedObjectId === objId) {
           ctx.beginPath();
-          if (body.label === 'circle') {
-            const c = toScreen(worldPos.x, worldPos.y);
-            ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED, 0, 2 * Math.PI);
-          } else {
-            const verts = body.vertices.map(v => matterToWorld(v.x, v.y));
-            const first = toScreen(verts[0].x, verts[0].y);
-            ctx.moveTo(first.x, first.y);
-            for (let i = 1; i < verts.length; i++) {
-              const p = toScreen(verts[i].x, verts[i].y);
-              ctx.lineTo(p.x, p.y);
-            }
-          }
-          ctx.closePath();
-          ctx.fillStyle = (body.render?.fillStyle || '#999999') + 'CC';
-          ctx.fill();
-          ctx.strokeStyle = body.render?.fillStyle;
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // Focus Ring
-          if (loopPropsRef.current.followedObjectId && bodyMap.current.get(loopPropsRef.current.followedObjectId) === body) {
-            ctx.beginPath();
-            if (body.label === 'circle') {
-              const c = toScreen(worldPos.x, worldPos.y);
-              ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED + 4, 0, 2 * Math.PI);
-            } else {
-              const verts = body.vertices.map(v => matterToWorld(v.x, v.y));
-              const first = toScreen(verts[0].x, verts[0].y);
-              ctx.moveTo(first.x, first.y);
-              for (let i = 1; i < verts.length; i++) {
-                const p = toScreen(verts[i].x, verts[i].y);
-                ctx.lineTo(p.x, p.y);
-              }
-              ctx.closePath();
-            }
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([5, 5]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-          }
-
-          // Selected Highlight (Cursor Tool)
-          if (loopPropsRef.current.activeTool === 'cursor' && loopPropsRef.current.selectedObjectId && bodyMap.current.get(loopPropsRef.current.selectedObjectId) === body) {
-            ctx.beginPath();
-            if (body.label === 'circle') {
-              const c = toScreen(worldPos.x, worldPos.y);
-              ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED + 4, 0, 2 * Math.PI);
-            } else {
-              const verts = body.vertices.map(v => matterToWorld(v.x, v.y));
-              const first = toScreen(verts[0].x, verts[0].y);
-              ctx.moveTo(first.x, first.y);
-              for (let i = 1; i < verts.length; i++) {
-                const p = toScreen(verts[i].x, verts[i].y);
-                ctx.lineTo(p.x, p.y);
-              }
-              ctx.closePath();
-            }
-            ctx.strokeStyle = '#4ADE80'; // Green highlight
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            // Rotation Handle
-            if (body.label !== 'circle') {
-              const radiusM = (body.plugin?.size || 1) / 2;
-              const handleDist = radiusM + 0.5;
-              const hWorld = {
-                x: worldPos.x + handleDist * Math.cos(body.angle - Math.PI/2),
-                y: worldPos.y - handleDist * Math.sin(body.angle - Math.PI/2)
-              };
-              const hScreen = toScreen(hWorld.x, hWorld.y);
-
-              // Line to handle
-              ctx.beginPath();
-              const cScreen = toScreen(worldPos.x, worldPos.y);
-              ctx.moveTo(cScreen.x, cScreen.y);
-              ctx.lineTo(hScreen.x, hScreen.y);
-              ctx.strokeStyle = '#FFB65A';
-              ctx.setLineDash([2, 2]);
-              ctx.lineWidth = 1.5;
-              ctx.stroke();
-              ctx.setLineDash([]);
-
-              // The handle
-              ctx.beginPath();
-              ctx.arc(hScreen.x, hScreen.y, 8, 0, 2 * Math.PI);
-              ctx.fillStyle = '#FFB65A';
-              ctx.fill();
-              ctx.strokeStyle = '#FFFFFF';
-              ctx.lineWidth = 2;
-              ctx.stroke();
-            }
-          }
-        });
-
-        // Draw Vectors
-        (loopPropsRef.current.simState?.objects || []).forEach(obj => {
-          if (obj.isSpawned && bodyMap.current.get(obj.id)) {
-            renderObjectVectors(ctx, toScreen, obj, bodyMap.current.get(obj.id), showResultantVector);
-          }
-        });
-
-        // Current Dragging Vector
-        if (drawingVectorRef.current) {
-          const v = drawingVectorRef.current;
-          drawArrow(ctx, toScreen, v.startX, v.startY, v.currentX, v.currentY, v.type === 'velocity' ? '#3B82F6' : '#EF4444');
+          if (body.label === 'circle') { const c = toScreen(worldPos.x, worldPos.y); ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED + 4, 0, 2 * Math.PI); }
+          else { const verts = body.vertices.map(v => matterToWorld(v.x, v.y)); const f = toScreen(verts[0].x, verts[0].y); ctx.moveTo(f.x, f.y); for (let i = 1; i < verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); } ctx.closePath(); }
+          ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
         }
 
-        // Grid snap dot
-        if (gridSnapping && mouseRef.current.x > -1000) {
-          const us = unitStep || 1;
-          const wx = Math.round(((mouseRef.current.x - ox) / PPM_ZOOMED) / us) * us;
-          const wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
-          const s = toScreen(wx, wy);
-          ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, 2 * Math.PI);
-          ctx.fillStyle = '#9CA3AF'; ctx.fill();
-        }
-
-        // Cursor coords
-        if (showCursorCoords && mouseRef.current.x > -1000) {
-          const wx = (mouseRef.current.x - ox) / PPM_ZOOMED;
-          const wy = (oy - mouseRef.current.y) / PPM_ZOOMED;
-          const text = `${wx.toFixed(1)}m, ${wy.toFixed(1)}m`;
-          ctx.font = '12px "Chakra Petch"';
-          ctx.fillStyle = 'rgba(0,0,0,0.7)';
-          ctx.fillRect(mouseRef.current.x + 15, mouseRef.current.y + 15, ctx.measureText(text).width + 10, 20);
-          ctx.fillStyle = '#fff';
-          ctx.fillText(text, mouseRef.current.x + 20, mouseRef.current.y + 30);
-        }
-
-        // Hologram Preview (Add Tool)
-        if (activeTool === 'add' && spawnConfig && mouseRef.current.x > -1000) {
-          const us = unitStep || 1;
-          const wx = Math.round(((mouseRef.current.x - ox) / PPM_ZOOMED) / us) * us;
-          const wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
-          const s = toScreen(wx, wy);
-          const radiusPx = (spawnConfig.size * PIXELS_PER_METER * zoom) / 2;
-
-          ctx.save();
-          ctx.globalAlpha = 0.4;
+        // Selection Highlight
+        const isSelected = loopSelectedId === objId || (loopSelectedIds || []).includes(objId);
+        if (activeTool === 'cursor' && isSelected) {
           ctx.beginPath();
-          if (spawnConfig.shape === 'circle') {
-            ctx.arc(s.x, s.y, radiusPx, 0, 2 * Math.PI);
-          } else if (spawnConfig.shape === 'polygon-3') {
-             // Simplified triangle for hologram
-             ctx.moveTo(s.x, s.y - radiusPx);
-             ctx.lineTo(s.x + radiusPx, s.y + radiusPx);
-             ctx.lineTo(s.x - radiusPx, s.y + radiusPx);
-          } else {
-            ctx.rect(s.x - radiusPx, s.y - radiusPx, radiusPx * 2, radiusPx * 2);
+          if (body.label === 'circle') { const c = toScreen(worldPos.x, worldPos.y); ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED + 4, 0, 2 * Math.PI); }
+          else { const verts = body.vertices.map(v => matterToWorld(v.x, v.y)); const f = toScreen(verts[0].x, verts[0].y); ctx.moveTo(f.x, f.y); for (let i = 1; i < verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); } ctx.closePath(); }
+          ctx.strokeStyle = '#4ADE80'; ctx.lineWidth = 3; ctx.stroke();
+          
+          if (body.label !== 'circle' && loopSelectedId === objId) {
+            const rM = (body.plugin?.size || 1) / 2;
+            const hd = rM + 0.5;
+            const hWorld = { x: worldPos.x + hd * Math.cos(body.angle - Math.PI / 2), y: worldPos.y - hd * Math.sin(body.angle - Math.PI / 2) };
+            const hScreen = toScreen(hWorld.x, hWorld.y);
+            const cScreen = toScreen(worldPos.x, worldPos.y);
+            ctx.beginPath(); ctx.moveTo(cScreen.x, cScreen.y); ctx.lineTo(hScreen.x, hScreen.y);
+            ctx.strokeStyle = '#FFB65A'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+            ctx.beginPath(); ctx.arc(hScreen.x, hScreen.y, 8, 0, 2 * Math.PI);
+            ctx.fillStyle = '#FFB65A'; ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
           }
-          ctx.closePath();
-          ctx.fillStyle = spawnConfig.color || '#FFB65A';
-          ctx.fill();
-          ctx.strokeStyle = spawnConfig.color || '#FFB65A';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          ctx.restore();
         }
+      });
+
+      // ✅ Erase Hover Highlight
+      if (activeTool === 'erase' && mouseRef.current.x > -1000) {
+        const wx = (mouseRef.current.x - ox) / PPM_ZOOMED;
+        const wy = (oy - mouseRef.current.y) / PPM_ZOOMED;
+        let hoverObjId = null;
+        const { x: mx, y: my } = worldToMatter(wx, wy);
+        const hit = Matter.Query.point(Matter.Composite.allBodies(engine.world).filter(b => b.label !== 'ground'), { x: mx, y: my });
+        if (hit.length) hoverObjId = [...bodyMap.current.entries()].find(([, b]) => b === hit[0])?.[0] || null;
+
+        if (hoverObjId) {
+          const body = bodyMap.current.get(hoverObjId);
+          if (body) {
+            const worldPos = matterToWorld(body.position.x, body.position.y);
+            const radiusM = (body.circleRadius ?? (body.plugin?.size / 2)) / PIXELS_PER_METER;
+            ctx.beginPath();
+            if (body.label === 'circle') { const c = toScreen(worldPos.x, worldPos.y); ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED + 6, 0, 2 * Math.PI); }
+            else { const verts = body.vertices.map(v => matterToWorld(v.x, v.y)); const f = toScreen(verts[0].x, verts[0].y); ctx.moveTo(f.x, f.y); for (let i = 1; i < verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); } ctx.closePath(); }
+            ctx.strokeStyle = '#EF4444'; ctx.lineWidth = 4; ctx.stroke();
+          }
+        }
+      }
+
+      // Draw Vectors
+      (loopSimState?.objects || []).forEach(obj => {
+        if (obj.isSpawned && bodyMap.current.get(obj.id)) {
+          renderObjectVectors(ctx, toScreen, obj, bodyMap.current.get(obj.id), showResultantVector, loopSimState.gravity);
+        }
+      });
+
+      // Dragging Vector Preview
+      if (drawingVectorRef.current) {
+        const v = drawingVectorRef.current;
+        drawArrow(ctx, toScreen, v.startX, v.startY, v.currentX, v.currentY, v.type === 'velocity' ? '#3B82F6' : '#EF4444');
+      }
+
+      // Grid snap dot
+      if (gridSnapping && mouseRef.current.x > -1000) {
+        const us = unitStep || 1;
+        const wx = Math.round(((mouseRef.current.x - ox) / PPM_ZOOMED) / us) * us;
+        const wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
+        const s = toScreen(wx, wy);
+        ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, 2 * Math.PI); ctx.fillStyle = '#9CA3AF'; ctx.fill();
+      }
+
+      // Cursor coords
+      if (showCursorCoords && mouseRef.current.x > -1000) {
+        const wx = (mouseRef.current.x - ox) / PPM_ZOOMED;
+        const wy = (oy - mouseRef.current.y) / PPM_ZOOMED;
+        const text = `${wx.toFixed(1)}m, ${wy.toFixed(1)}m`;
+        ctx.font = '12px "Chakra Petch"';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(mouseRef.current.x + 15, mouseRef.current.y + 15, ctx.measureText(text).width + 10, 20);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(text, mouseRef.current.x + 20, mouseRef.current.y + 30);
+      }
+
+      // Add Tool Hologram Preview
+      if (activeTool === 'add' && spawnConfig && mouseRef.current.x > -1000) {
+        const us = unitStep || 1;
+        const wx = Math.round(((mouseRef.current.x - ox) / PPM_ZOOMED) / us) * us;
+        const wy = Math.round(((oy - mouseRef.current.y) / PPM_ZOOMED) / us) * us;
+        const s = toScreen(wx, wy);
+        const radiusPx = (spawnConfig.size * PIXELS_PER_METER * zoom) / 2;
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.beginPath();
+        if (spawnConfig.shape === 'circle') ctx.arc(s.x, s.y, radiusPx, 0, 2 * Math.PI);
+        else if (spawnConfig.shape === 'polygon-3') { ctx.moveTo(s.x, s.y - radiusPx); ctx.lineTo(s.x + radiusPx, s.y + radiusPx); ctx.lineTo(s.x - radiusPx, s.y + radiusPx); }
+        else ctx.rect(s.x - radiusPx, s.y - radiusPx, radiusPx * 2, radiusPx * 2);
+        ctx.closePath();
+        ctx.fillStyle = spawnConfig.color || '#FFB65A'; ctx.fill();
+        ctx.strokeStyle = spawnConfig.color || '#FFB65A'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.restore();
       }
 
       raf = requestAnimationFrame(loop);
     };
 
     raf = requestAnimationFrame(loop);
-    return () => {
-      cancelAnimationFrame(raf);
-      Matter.Engine.clear(engine);
-      Matter.Composite.clear(engine.world, false);
-    };
+    return () => { cancelAnimationFrame(raf); Matter.Engine.clear(engine); Matter.Composite.clear(engine.world, false); };
   }, [engineResetToken]);
 
-  // Sync simState → engine
+  // ── Sync simState → engine ───────────────────────────────────────────────
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !simState) return;
@@ -499,35 +440,21 @@ const MatterCanvas = forwardRef(({
 
     const activeIds = new Set(simState.objects?.filter(o => o.isSpawned).map(o => o.id) || []);
     for (const [id, b] of bodyMap.current.entries()) {
-      if (!activeIds.has(id)) {
-        Matter.Composite.remove(engine.world, b);
-        bodyMap.current.delete(id);
-      }
+      if (!activeIds.has(id)) { Matter.Composite.remove(engine.world, b); bodyMap.current.delete(id); }
     }
 
     simState.objects?.forEach(obj => {
       if (!obj.isSpawned) return;
-
       let body = bodyMap.current.get(obj.id);
 
       if (!body) {
-        const opts = {
-          restitution: obj.values?.restitution || 0,
-          friction: 0.0,
-          frictionAir: 0.0,
-          frictionStatic: 0.0,
-        };
-
+        const opts = { restitution: obj.values?.restitution || 0, friction: 0.0, frictionAir: 0.0, frictionStatic: 0.0 };
         const { x: px, y: py } = worldToMatter(obj.position?.x || 0, obj.position?.y || 10);
         const radiusPx = (obj.size || 1) * PIXELS_PER_METER / 2;
 
-        if (obj.shape === 'circle') {
-          body = Matter.Bodies.circle(px, py, radiusPx, opts);
-        } else if (obj.shape === 'polygon-3') {
-          body = Matter.Bodies.polygon(px, py, 3, radiusPx / (Math.sqrt(3) / 2), opts);
-        } else {
-          body = Matter.Bodies.rectangle(px, py, radiusPx * 2, radiusPx * 2, opts);
-        }
+        if (obj.shape === 'circle') body = Matter.Bodies.circle(px, py, radiusPx, opts);
+        else if (obj.shape === 'polygon-3') body = Matter.Bodies.polygon(px, py, 3, radiusPx / (Math.sqrt(3) / 2), opts);
+        else body = Matter.Bodies.rectangle(px, py, radiusPx * 2, radiusPx * 2, opts);
 
         body.label = obj.shape;
         body.plugin = { size: obj.size || 1 };
@@ -539,17 +466,12 @@ const MatterCanvas = forwardRef(({
 
       if (obj.values && !timeStateRef.current?.isPlaying) {
         if (obj.values.height !== undefined) {
-          const { y: newY } = worldToMatter(
-            matterToWorld(body.position.x, body.position.y).x,
-            obj.values.height
-          );
+          const { y: newY } = worldToMatter(matterToWorld(body.position.x, body.position.y).x, obj.values.height);
           Matter.Body.setPosition(body, { x: body.position.x, y: newY });
         }
 
         const vels = [...(obj.values?.velocities || [])];
-        if (obj.values?.velocity) {
-          vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
-        }
+        if (obj.values?.velocity) vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
 
         let vxSum = 0, vySum = 0;
         for (const v of vels) {
@@ -563,14 +485,7 @@ const MatterCanvas = forwardRef(({
     });
   }, [simState, simSyncToken]);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      width={size.w}
-      height={size.h}
-      className="absolute inset-0 pointer-events-none z-10"
-    />
-  );
+  return <canvas ref={canvasRef} width={size.w} height={size.h} className="absolute inset-0 pointer-events-none z-10" />;
 });
 
 export default memo(MatterCanvas);

@@ -55,7 +55,7 @@ export const matterToWorld = (xPx, yPx) => ({
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const computeGravityY = (g) => (g * PIXELS_PER_METER) / 1000 / 1000;
+export const computeGravityY = (g) => (g * PIXELS_PER_METER) / 1000;
 
 /**
  * Creates the Matter.js engine with correct gravity defaults.
@@ -64,8 +64,8 @@ export const createPhysicsEngine = () => {
   Matter.Resolver._restingThresh = 0.05;
 
   const engine = Matter.Engine.create({
-    positionIterations: 20,
-    velocityIterations: 15,
+    positionIterations: 30,
+    velocityIterations: 20,
     enableSleeping: false,
   });
 
@@ -113,7 +113,7 @@ const SETTLE_DIST_PX  = 1;    // px — how close to resting Y to snap
  * @param {object} timeState   - { time, isPlaying }
  * @param {function} setIsPlaying
  */
-export const updatePhysics = (engine, dtMs, state, bodyMap, maxTime, timeState, setIsPlaying) => {
+export const updatePhysics = (engine, dtMs, state, bodyMap, timeState, setIsPlaying) => {
   if (!timeState.isPlaying) return;
 
   let hasActiveObject = false;
@@ -146,6 +146,12 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, maxTime, timeState, 
         Matter.Body.setVelocity(body, { x: 0, y: 0 });
         Matter.Body.setPosition(body, { x: body.position.x, y: restingY });
       } else {
+        // Anti-Noclip: ป้องกันวัตถุทะลุพื้นลงไป (Matter Y moves down)
+        // ถ้า y ลงไปเกินพื้น (ซึ่งคือ restingY) ให้ดึงกลับขึ้นมาทันที
+        if (body.position.y > restingY + 2) { // 2px margin
+           Matter.Body.setPosition(body, { x: body.position.x, y: restingY });
+           if (body.velocity.y > 0) Matter.Body.setVelocity(body, { x: body.velocity.x, y: 0 });
+        }
         allSettled = false;
       }
 
@@ -156,8 +162,9 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, maxTime, timeState, 
       // F_matter = F_N * PPM * (dtS²)
       // where dtS = dtMs / 1000
       //
-      const dtS = dtMs / 1000;
-      const forceScale = PIXELS_PER_METER * dtS * dtS;
+      // forceScale: เพื่อแปลง N (world) เป็น Matter force
+      // a = F/m -> Δv = (F/m) * Δt
+      const forceScale = PIXELS_PER_METER / 1000;
 
       const forces = [...(obj.values?.forces || [])];
       if (obj.values?.force != null) {
@@ -183,51 +190,11 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, maxTime, timeState, 
   }
 
   // All settled or time exceeded → stop
-  if (allSettled || timeState.time >= maxTime) {
+  if (allSettled) {
     timeState.isPlaying = false;
     setIsPlaying(false);
     return;
   }
 
   Matter.Engine.update(engine, dtMs);
-};
-
-/**
- * Predicts simulation duration using kinematics.
- * h = height above ground (world Y, meters)
- * uy = initial vertical speed (upward positive, m/s)
- * Solves: 0 = h + uy*t - 0.5*g*t²
- *
- * @param {object} simState
- * @returns {number} seconds
- */
-export const predictSimulationTime = (simState) => {
-  if (!simState?.objects) return 10.0;
-
-  const g = simState.gravity ?? 9.8;
-  let maxT = 0;
-
-  for (const obj of simState.objects) {
-    if (!obj.isSpawned) continue;
-
-    const radiusM = (obj.size ?? 1) / 2;
-    const h = Math.max(0, (obj.position?.y ?? 0) - radiusM);
-
-    let uy = 0;
-    const vels = [...(obj.values?.velocities || [])];
-    if (obj.values?.velocity != null) {
-      vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle ?? 0 });
-    }
-    for (const v of vels) {
-      uy += v.magnitude * Math.sin((v.angle * Math.PI) / 180);
-    }
-
-    const disc = uy * uy + 2 * g * h;
-    if (disc >= 0) {
-      const t = (uy + Math.sqrt(disc)) / g;
-      if (t > maxT) maxT = t;
-    }
-  }
-
-  return Math.min(Math.max(maxT * 1.2 + 1.0, 5), 45);
 };

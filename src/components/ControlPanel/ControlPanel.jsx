@@ -26,9 +26,8 @@ const ControlPanel = forwardRef(function ControlPanel({ simulationType = 'defaul
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-4 pb-6 flex flex-col rounded-b-2xl bg-theme-panel">
         {state.objects.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] text-center px-4">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-theme-muted mb-3 opacity-40"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            <p className="text-[13px] text-theme-muted leading-relaxed">ใช้เครื่องมือ <span className="font-bold text-[#FFB65A]">＋ เพิ่มวัตถุ</span> บน Canvas<br/>เพื่อเริ่มเพิ่มวัตถุเข้ามา</p>
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] text-center px-4 uppercase tracking-[0.1em]">
+            <p className="text-[12px] font-bold text-theme-muted opacity-40">ยังไม่มีวัตถุ</p>
           </div>
         ) : (
           <div className="flex-1">

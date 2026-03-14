@@ -37,7 +37,7 @@ export const SpawnOverlay = ({ activeTool, spawnConfig, setSpawnConfig }) => {
         </select>
         <div className="w-[1px] h-6 bg-theme-border" />
         <SharedSlider 
-          label="ขนาด:" min="0.5" max="4" step="0.1" 
+          label="ขนาด:" min="0.1" max="10" step="0.1" 
           value={spawnConfig.size} 
           onChange={(e) => setSpawnConfig({...spawnConfig, size: parseFloat(e.target.value)})} 
         />

@@ -51,94 +51,137 @@ export const VectorTooltip = ({ vectorEditor, setVectorEditor, updateVectorValue
         onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
       >
-        <span className="text-xs font-bold text-theme-secondary flex items-center gap-1">
-          {vectorEditor.type === 'velocity' ? 'เวกเตอร์ความเร็ว (v)' : 'เวกเตอร์แรง (F)'}
-          {vectorEditor.type === 'velocity' ? <span className="w-2 h-2 rounded-full bg-blue-500" /> : <span className="w-2 h-2 rounded-full bg-red-500" />}
-        </span>
-        <div className="flex flex-col gap-1.5 min-w-[140px]">
-          <div className="flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-md px-2 py-1 relative pr-8">
-            <span className="text-xs text-theme-secondary font-['Chakra_Petch'] w-[35px]">ขนาด:</span>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <span className="text-[11px] font-bold text-theme-secondary uppercase tracking-wider flex items-center gap-1.5">
+            {vectorEditor.type === 'velocity' ? 'Velocity (v)' : 'Force (F)'}
+            <div className={`w-2 h-2 rounded-full ${vectorEditor.type === 'velocity' ? 'bg-blue-500' : 'bg-red-500'}`} />
+          </span>
+          <span className="text-[10px] font-bold text-theme-muted bg-theme-sidebar px-1.5 py-0.5 rounded">
+            {vectorEditor.type === 'velocity' ? 'm/s' : 'N'}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2 min-w-[160px]">
+          {/* Name Field */}
+          <div className="flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-lg px-2 py-1.5 border border-transparent focus-within:border-[#FFB65A]/50 transition-colors">
+            <span className="text-[10px] font-bold text-theme-muted uppercase w-10">ป้าย:</span>
             <input 
-              autoFocus 
-              type="number" 
-              className="w-full bg-transparent text-sm font-medium outline-none text-theme-primary" 
-              value={vectorEditor.magnitude} 
+              type="text" 
+              placeholder="ชื่อเวกเตอร์..."
+              className="flex-1 bg-transparent text-xs font-semibold outline-none text-theme-primary placeholder:text-theme-muted/50" 
+              value={vectorEditor.name || ''} 
               onChange={(e) => { 
-                e.stopPropagation();
-                const val = Number(e.target.value) || 0; 
-                setVectorEditor(prev => ({ ...prev, magnitude: val })); 
-                updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { magnitude: val }); 
+                const val = e.target.value;
+                setVectorEditor(prev => ({ ...prev, name: val })); 
+                updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { name: val }); 
               }} 
-              onKeyDown={(e) => e.stopPropagation()}
             />
-            <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
-              <HoldableButton onAction={() => { 
-                setVectorEditor(prev => { 
-                  if (!prev) return null; 
-                  const val = Number(prev.magnitude) + 1; 
-                  updateVectorValue(prev.objId, prev.type, prev.index, { magnitude: val }); 
-                  return { ...prev, magnitude: val }; 
-                }); 
-              }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5">
-                <ArrowUpIcon />
-              </HoldableButton>
-              <HoldableButton onAction={() => { 
-                setVectorEditor(prev => { 
-                  if (!prev) return null; 
-                  const val = Math.max(0, Number(prev.magnitude) - 1); 
-                  updateVectorValue(prev.objId, prev.type, prev.index, { magnitude: val }); 
-                  return { ...prev, magnitude: val }; 
-                }); 
-              }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 border-t border-[#d6cfbe]">
-                <ArrowDownIcon />
-              </HoldableButton>
+          </div>
+
+          <div className="flex gap-2">
+            {/* Magnitude */}
+            <div className="flex-1 flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-lg px-2 py-1.5 relative pr-7 border border-transparent focus-within:border-[#FFB65A]/50 transition-colors">
+              <span className="text-[10px] font-bold text-theme-muted uppercase">เมา:</span>
+              <input 
+                autoFocus 
+                type="number" 
+                className="w-full bg-transparent text-xs font-semibold outline-none text-theme-primary" 
+                value={vectorEditor.magnitude} 
+                onChange={(e) => { 
+                  const val = Number(e.target.value) || 0; 
+                  setVectorEditor(prev => ({ ...prev, magnitude: val })); 
+                  updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { magnitude: val }); 
+                }} 
+              />
+              <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
+                <HoldableButton onAction={() => { 
+                  setVectorEditor(prev => { 
+                    if (!prev) return null; 
+                    const val = Number(prev.magnitude) + 1; 
+                    updateVectorValue(prev.objId, prev.type, prev.index, { magnitude: val }); 
+                    return { ...prev, magnitude: val }; 
+                  }); 
+                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5">
+                  <ArrowUpIcon />
+                </HoldableButton>
+                <HoldableButton onAction={() => { 
+                  setVectorEditor(prev => { 
+                    if (!prev) return null; 
+                    const val = Math.max(0, Number(prev.magnitude) - 1); 
+                    updateVectorValue(prev.objId, prev.type, prev.index, { magnitude: val }); 
+                    return { ...prev, magnitude: val }; 
+                  }); 
+                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 border-t border-[#d6cfbe] dark:border-white/5">
+                  <ArrowDownIcon />
+                </HoldableButton>
+              </div>
+            </div>
+
+            {/* Angle */}
+            <div className="flex-1 flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-lg px-2 py-1.5 relative pr-7 border border-transparent focus-within:border-[#FFB65A]/50 transition-colors">
+              <span className="text-[10px] font-bold text-theme-muted uppercase">มุม:</span>
+              <input 
+                type="number" 
+                className="w-full bg-transparent text-xs font-semibold outline-none text-theme-primary" 
+                value={vectorEditor.angle} 
+                onChange={(e) => { 
+                  const val = Number(e.target.value) || 0; 
+                  setVectorEditor(prev => ({ ...prev, angle: val })); 
+                  updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { angle: val }); 
+                }} 
+              />
+              <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
+                <HoldableButton onAction={() => { 
+                  setVectorEditor(prev => { 
+                    if (!prev) return null; 
+                    const val = Number(prev.angle) + 1; 
+                    updateVectorValue(prev.objId, prev.type, prev.index, { angle: val }); 
+                    return { ...prev, angle: val }; 
+                  }); 
+                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5">
+                  <ArrowUpIcon />
+                </HoldableButton>
+                <HoldableButton onAction={() => { 
+                  setVectorEditor(prev => { 
+                    if (!prev) return null; 
+                    const val = Number(prev.angle) - 1; 
+                    updateVectorValue(prev.objId, prev.type, prev.index, { angle: val }); 
+                    return { ...prev, angle: val }; 
+                  }); 
+                }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 border-t border-[#d6cfbe] dark:border-white/5">
+                  <ArrowDownIcon />
+                </HoldableButton>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-[#F3F4F6] dark:bg-[#1E1F22] rounded-md px-2 py-1 relative pr-8">
-            <span className="text-xs text-theme-secondary font-['Chakra_Petch'] w-[35px]">มุม:</span>
-            <input 
-              type="number" 
-              className="w-full bg-transparent text-sm font-medium outline-none text-theme-primary" 
-              value={vectorEditor.angle} 
-              onChange={(e) => { 
-                e.stopPropagation();
-                const val = Number(e.target.value) || 0; 
-                setVectorEditor(prev => ({ ...prev, angle: val })); 
-                updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { angle: val }); 
-              }} 
-              onKeyDown={(e) => e.stopPropagation()}
-            />
-            <div className="absolute right-1 top-1 bottom-1 flex flex-col bg-[#dcd6c7] dark:bg-[#3F4147] rounded-md overflow-hidden">
-              <HoldableButton onAction={() => { 
-                setVectorEditor(prev => { 
-                  if (!prev) return null; 
-                  const val = Number(prev.angle) + 1; 
-                  updateVectorValue(prev.objId, prev.type, prev.index, { angle: val }); 
-                  return { ...prev, angle: val }; 
-                }); 
-              }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5">
-                <ArrowUpIcon />
-              </HoldableButton>
-              <HoldableButton onAction={() => { 
-                setVectorEditor(prev => { 
-                  if (!prev) return null; 
-                  const val = Number(prev.angle) - 1; 
-                  updateVectorValue(prev.objId, prev.type, prev.index, { angle: val }); 
-                  return { ...prev, angle: val }; 
-                }); 
-              }} className="hover:bg-[#c8c2b4] dark:hover:bg-[#4d5057] p-0.5 border-t border-[#d6cfbe]">
-                <ArrowDownIcon />
-              </HoldableButton>
+
+          {/* Color Picker */}
+          <div className="flex items-center justify-between p-1 bg-theme-sidebar/30 rounded-lg">
+            <span className="text-[10px] font-bold text-theme-muted uppercase ml-1">สี:</span>
+            <div className="flex gap-1.5">
+              {(vectorEditor.type === 'velocity' 
+                ? ['#3B82F6', '#60A5FA', '#2563EB', '#1D4ED8', '#1E40AF'] 
+                : ['#EF4444', '#F87171', '#DC2626', '#B91C1C', '#991B1B']
+              ).map(color => (
+                <button 
+                  key={color} 
+                  onClick={() => {
+                    setVectorEditor(prev => ({ ...prev, color }));
+                    updateVectorValue(vectorEditor.objId, vectorEditor.type, vectorEditor.index, { color });
+                  }}
+                  className={`w-4 h-4 rounded-full border-2 transition-transform ${vectorEditor.color === color ? 'border-theme-primary scale-125' : 'border-transparent'}`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
             </div>
           </div>
         </div>
         <button 
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           onClick={(e) => { e.stopPropagation(); e.preventDefault(); setVectorEditor(null); }} 
-          onKeyDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-          className="bg-theme-primary text-white text-xs font-bold py-1.5 rounded-md mt-1"
+          className="bg-[#FFB65A] hover:bg-[#FFB65A]/90 text-white text-[11px] font-bold py-2 rounded-lg mt-1 transition-colors shadow-sm"
         >
-          ตกลง
+          ยืนยัน
         </button>
       </motion.div>
     </AnimatePresence>
