@@ -16,7 +16,7 @@ const MatterCanvas = forwardRef(({
   activeTool, spawnConfig, gridSnapping, showCursorCoords, 
   showResultantVector, timeStateRef, setIsPlaying,
   followedObjectId, selectedObjectId, selectedObjectIds,
-  controlPanelRef, 
+  controlPanelRef, onCrash
 }, ref) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
@@ -294,7 +294,15 @@ const MatterCanvas = forwardRef(({
       if (timeStateRef.current?.isPlaying) {
         accumulator += delta * (timeStateRef.current.timeScale || 1);
         while (accumulator >= FIXED_DELTA_MS) {
-          updatePhysics(engine, FIXED_DELTA_MS, loopPropsRef.current.simState, bodyMap.current, timeStateRef.current, setIsPlaying);
+          const status = updatePhysics(engine, FIXED_DELTA_MS, loopPropsRef.current.simState, bodyMap.current, timeStateRef.current, setIsPlaying);
+          
+          if (status === 'crash') {
+            timeStateRef.current.isPlaying = false;
+            setIsPlaying(false);
+            onCrash?.();
+            break;
+          }
+
           timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
           timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
           accumulator -= FIXED_DELTA_MS;

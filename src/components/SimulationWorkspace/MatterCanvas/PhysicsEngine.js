@@ -203,4 +203,12 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, timeState, setIsPlay
   }
 
   Matter.Engine.update(engine, dtMs);
+
+  // Crash Detection: Check for NaN or non-finite positions/velocities
+  for (const body of Matter.Composite.allBodies(engine.world)) {
+    if (!isFinite(body.position.x) || !isFinite(body.position.y) || 
+        !isFinite(body.velocity.x) || !isFinite(body.velocity.y)) {
+      return 'crash';
+    }
+  }
 };

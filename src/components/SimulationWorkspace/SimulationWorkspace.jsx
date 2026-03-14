@@ -214,6 +214,10 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
                       selectedObjectId={selectedObjectId}
                       selectedObjectIds={selectedObjectIds}
                       controlPanelRef={controlPanelRef} // ✅ เพิ่ม — ทำให้ MatterCanvas เรียก removeObject/removeObjects ได้
+                      onCrash={() => {
+                        showToast('การจำลองพิกัดขัดข้องเนื่องจากแรง/ความเร็วสูงเกินไป (กำลังย้อนกลับสู่สถานะเดิม)');
+                        handleRestart();
+                      }}
                     />
                     <TrackingSystem objects={simState?.objects} bodies={bodiesRef.current} offset={offset} zoom={zoom} size={size} onTeleport={handleTeleport} showOffScreenIndicators={!!simState?.showOffScreenIndicators} />
                     <RulerSystem rulerPoints={rulerPoints} setRulerPoints={setRulerPoints} activeTool={activeTool} offset={offset} zoom={zoom} size={size} unitStep={subStep} matterCanvasRef={matterCanvasRef} />

@@ -37,18 +37,30 @@ export const useSimulationLogic = ({
     const values = { ...obj.values };
     const key = type === 'velocity' ? 'velocities' : 'forces';
     const arr = [...(values[key] || [])];
-    if (index !== null && arr[index]) {
+    if (changes.remove) {
+      if (index !== null) {
+        arr.splice(index, 1);
+        values[key] = arr;
+      } else {
+        if (type === 'velocity') { delete values.velocity; delete values.angle; }
+        else { delete values.force; delete values.forceAngle; }
+        values[key] = arr; // Might still need to update forces/velocities array if mixed
+      }
+    } else if (index !== null && arr[index]) {
       arr[index] = { ...arr[index], ...changes };
+      values[key] = arr;
     } else if (index === null) {
       if (type === 'velocity') {
           if (changes.magnitude !== undefined) values.velocity = changes.magnitude;
           if (changes.angle !== undefined) values.angle = changes.angle;
+          if (changes.color !== undefined) values.color = changes.color; // Handle potential legacy color
       } else {
           if (changes.magnitude !== undefined) values.force = changes.magnitude;
           if (changes.angle !== undefined) values.forceAngle = changes.angle;
+          if (changes.color !== undefined) values.color = changes.color;
       }
+      values[key] = arr;
     }
-    values[key] = arr;
 
     if (controlPanelRef.current?.updateObjectValues) {
       controlPanelRef.current.updateObjectValues(objId, values);
