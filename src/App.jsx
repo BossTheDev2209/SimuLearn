@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db, auth } from './firebase';
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import LoadingSimulation from './components/LoadingSimulation';
 import Sidebar from './components/Sidebar';
@@ -144,7 +144,46 @@ function App() {
       localStorage.setItem("currentUserName", user.displayName || "User");
       window.location.reload(); 
     } catch (error) {
-      console.error("ล็อกอิน Google ไม่สำเร็จ:", error);
+      console.error("Auth Error (Google):", error.code, error.message);
+      alert("ล็อกอิน Google ไม่สำเร็จ: " + error.message);
+    }
+  };
+
+  const handleEmailLogin = async (email, password) => {
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      const user = result.user;
+      localStorage.setItem("currentUserId", user.uid);
+      localStorage.setItem("currentUserName", user.displayName || user.email.split('@')[0]);
+      window.location.reload();
+    } catch (error) {
+      console.error("Auth Error (Login):", error.code, error.message);
+      if (error.code === 'auth/operation-not-allowed') {
+        alert("ระบบล็อกอินด้วยอีเมลยังไม่ถูกเปิดใช้งาน กรุณาตั้งค่าใน Firebase Console");
+      } else if (error.code === 'auth/invalid-credential') {
+        alert("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+      } else {
+        alert("เข้าสู่ระบบไม่สำเร็จ: " + error.message);
+      }
+    }
+  };
+
+  const handleEmailSignup = async (email, password) => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      const user = result.user;
+      localStorage.setItem("currentUserId", user.uid);
+      localStorage.setItem("currentUserName", user.email.split('@')[0]);
+      window.location.reload();
+    } catch (error) {
+      console.error("Auth Error (Signup):", error.code, error.message);
+      if (error.code === 'auth/operation-not-allowed') {
+        alert("ระบบสมัครสมาชิกด้วยอีเมลยังไม่ถูกเปิดใช้งาน กรุณาตั้งค่าใน Firebase Console");
+      } else if (error.code === 'auth/email-already-in-use') {
+        alert("อีเมลนี้ถูกใช้งานไปแล้ว");
+      } else {
+        alert("สมัครสมาชิกไม่สำเร็จ: " + error.message);
+      }
     }
   };
 
@@ -155,7 +194,14 @@ function App() {
   };
 
   if (!myUserId) {
-    return <LoginPage onGoogleLogin={handleGoogleLogin} onGuestLogin={handleGuestLogin} />;
+    return (
+      <LoginPage 
+        onGoogleLogin={handleGoogleLogin} 
+        onEmailLogin={handleEmailLogin} 
+        onEmailSignup={handleEmailSignup}
+        onGuestLogin={handleGuestLogin} 
+      />
+    );
   }
 
   return (

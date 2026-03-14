@@ -65,7 +65,7 @@ export const useZoomLogic = (
     // 🌟 Disable panning while focusing to avoid camera jitter/conflict
     if (activeTool === 'focus') return;
 
-    if (activeTool === 'cursor' || !consumed) {
+    if (!consumed) {
       setIsDragging(true);
       dragStartScreen.current = { x: e.clientX, y: e.clientY };
       dragStartOffset.current = { ...cameraRef.current.offset };

@@ -99,8 +99,8 @@ export const createGround = () => {
   );
 };
 
-const SETTLE_SPEED_PX = 0.01; // px/ms — below this = effectively at rest
-const SETTLE_DIST_PX  = 1;    // px — how close to resting Y to snap
+const SETTLE_SPEED_PX = 0.05; // Slightly relaxed for better stopping response
+const SETTLE_DIST_PX  = 1.5;  // Slightly relaxed distance to ground
 
 /**
  * Performs a single fixed-timestep physics update.

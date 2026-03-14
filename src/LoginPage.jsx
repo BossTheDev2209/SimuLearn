@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Matter from 'matter-js';
 
-export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin }) {
+export default function LoginPage({ onGoogleLogin, onEmailLogin, onEmailSignup, onGuestLogin }) {
   const sceneRef = useRef(null);
   const engineRef = useRef(null);
   const renderRef = useRef(null);
@@ -13,6 +13,10 @@ export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin })
     if (savedTheme === 'light') return false;
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     const root = document.documentElement;
@@ -64,8 +68,21 @@ export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin })
     }
   };
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isLogin) {
+      onEmailLogin(email, password);
+    } else {
+      onEmailSignup(email, password);
+    }
+  };
+
   useEffect(() => {
     if (!sceneRef.current) return;
+    
+    // Only run Matter.js if the container is visible (optimization and prevents event capture issues)
+    const isVisible = window.getComputedStyle(sceneRef.current.parentElement).display !== 'none';
+    if (!isVisible) return;
 
     const Engine = Matter.Engine,
           Render = Matter.Render,
@@ -164,9 +181,9 @@ export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin })
   }, []);
 
   return (
-    <div className="flex w-full h-screen font-chakra bg-theme-main text-theme-primary overflow-hidden">
+    <div className="flex w-full h-screen font-chakra bg-theme-main text-theme-primary overflow-hidden relative">
       
-      <div className="hidden lg:flex lg:w-[55%] relative bg-[#F9F8F6] dark:bg-[#1E1F22] border-r border-theme-border flex-col items-center justify-center overflow-hidden">
+      <div className="hidden lg:flex lg:w-[55%] relative bg-[#F9F8F6] dark:bg-[#1E1F22] border-r border-theme-border flex-col items-center justify-center overflow-hidden z-0">
         
         <div className="absolute z-10 text-center pointer-events-none p-10">
           <h1 className="text-5xl font-bold text-theme-primary mb-4 drop-shadow-md">
@@ -181,7 +198,7 @@ export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin })
         
       </div>
 
-      <div className="w-full lg:w-[45%] flex items-center justify-center bg-theme-panel relative z-10">
+      <div className="w-full lg:w-[45%] flex items-center justify-center bg-theme-panel relative z-20">
         
         <button
           onClick={toggleTheme}
@@ -207,7 +224,7 @@ export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin })
           )}
         </button>
 
-        <div className="w-full max-w-[420px] px-8 py-10 mt-8 lg:mt-0">
+        <div className="w-full max-w-[420px] px-8 py-10 mt-8 lg:mt-0 relative z-30 pointer-events-auto">
           
           <div className="text-center lg:hidden mb-8">
             <h1 className="text-4xl font-bold text-theme-primary">
@@ -216,7 +233,7 @@ export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin })
           </div>
 
           <h2 className="text-2xl font-bold text-center mb-8 text-theme-primary">
-            ลงชื่อเข้าใช้
+            {isLogin ? 'ลงชื่อเข้าใช้' : 'สมัครสมาชิก'}
           </h2>
 
           <button 
@@ -238,27 +255,40 @@ export default function LoginPage({ onGoogleLogin, onEmailLogin, onGuestLogin })
             <div className="flex-1 border-t border-theme-border"></div>
           </div>
 
-          <div className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <input 
               type="email" 
               placeholder="ที่อยู่อีเมล" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-theme-main border border-theme-border-hover text-theme-primary rounded-lg px-4 py-3 outline-none focus:border-[#FFB65A] focus:ring-1 focus:ring-[#FFB65A] transition-all placeholder-theme-muted"
+              required
             />
             <input 
               type="password" 
               placeholder="รหัสผ่าน" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-theme-main border border-theme-border-hover text-theme-primary rounded-lg px-4 py-3 outline-none focus:border-[#FFB65A] focus:ring-1 focus:ring-[#FFB65A] transition-all placeholder-theme-muted"
+              required
             />
             <button 
-              onClick={onEmailLogin}
+              type="submit"
               className="w-full bg-[#FFB65A] text-gray-900 font-bold rounded-lg px-4 py-3 hover:bg-[#F0A03E] transition-all shadow-sm mt-2"
             >
-              เข้าสู่ระบบ
+              {isLogin ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
             </button>
-          </div>
+          </form>
 
           <p className="text-center text-sm text-theme-secondary mt-6">
-            ยังไม่มีบัญชี? <a href="#" className="text-[#FFB65A] hover:underline font-semibold">สมัครสมาชิก</a>
+            {isLogin ? 'ยังไม่มีบัญชี?' : 'มีบัญชีอยู่แล้ว?'} {' '}
+            <button 
+              type="button"
+              onClick={() => setIsLogin(prev => !prev)}
+              className="text-[#FFB65A] hover:underline font-semibold p-1 cursor-pointer transition-all hover:opacity-80"
+            >
+              {isLogin ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}
+            </button>
           </p>
 
           <div className="mt-10 pt-6 border-t border-theme-border text-center">

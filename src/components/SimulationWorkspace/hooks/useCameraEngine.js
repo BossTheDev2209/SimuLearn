@@ -43,16 +43,15 @@ export const useCameraEngine = (activeSim, followedObjectId, onSavePhysicsState,
           : 1 / 60;
         lastFollowTimeRef.current = now;
 
-        // ✅ Exponential decay lerp — ความเร็วกล้อง = 8 หน่วย/วินาที
-        // สูตร: factor = 1 - e^(-speed * dt)
-        // speed = 8 → กล้องถึงเป้าใน ~0.5s ไม่ว่าจะ 60Hz หรือ 144Hz
-        const FOLLOW_SPEED = 8;
+        // ✅ Exponential decay lerp — High speed following (defaulting to 20 for better reactivity)
+        const FOLLOW_SPEED = 20;
         const lerpFactor = 1 - Math.exp(-FOLLOW_SPEED * deltaTime);
 
         const distSq = (targetX - currentX) ** 2 + (targetY - currentY) ** 2;
+        const MAX_LAG_SQ = 400 * 400; // If more than 400px away, snap instantly
 
         let newOffset;
-        if (distSq < 1.0) {
+        if (distSq < 1.0 || distSq > MAX_LAG_SQ) {
           newOffset = { x: targetX, y: targetY };
         } else {
           newOffset = {
