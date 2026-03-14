@@ -75,7 +75,7 @@ export default function SettingsModal({ isOpen, onClose, userPreferences, onSave
             {/* Floating Close Button */}
             <button
               onClick={handleClose}
-              className="absolute -top-4 -right-4 w-10 h-10 bg-[#EF4444] text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white dark:border-[#1E1F22] hover:bg-red-600 transition-all z-10 cursor-pointer"
+              className="absolute -top-4 -right-4 w-10 h-10 bg-[#FFB65A] text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white dark:border-[#1E1F22] hover:opacity-90 transition-all z-10 cursor-pointer"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />

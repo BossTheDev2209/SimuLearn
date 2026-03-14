@@ -159,7 +159,7 @@ export default function Sidebar({
                           <button onClick={(e) => { e.stopPropagation(); handleShare(sim); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-theme-primary hover:bg-theme-hover transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></svg><span>แชร์</span></button>
                           <button onClick={(e) => { e.stopPropagation(); handleStartRename(sim); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-theme-primary hover:bg-theme-hover transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg><span>เปลี่ยนชื่อ</span></button>
                           <div className="my-1 mx-3 border-t border-theme-border"></div>
-                          <button onClick={(e) => { e.stopPropagation(); onDeleteSimulation(sim.id); setActiveMenu(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>ลบประวัติ</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); onDeleteSimulation(sim.id); setActiveMenu(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[#FFB65A] hover:bg-[#FFB65A]/10 dark:hover:bg-[#FFB65A]/20 transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>ลบประวัติ</span></button>
                         </div>
                       )}
                     </li>
@@ -216,7 +216,7 @@ export default function Sidebar({
             <div className="my-1 mx-3 border-t border-theme-border"></div>
             <button 
               onClick={(e) => { e.stopPropagation(); setIsProfileMenuOpen(false); onLogout(); }} 
-              className="mx-1 w-[calc(100%-8px)] flex items-center gap-3 px-3 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors cursor-pointer"
+              className="mx-1 w-[calc(100%-8px)] flex items-center gap-3 px-3 py-2.5 text-[#FFB65A] hover:bg-[#FFB65A]/10 dark:hover:bg-[#FFB65A]/20 rounded-lg transition-colors cursor-pointer"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>

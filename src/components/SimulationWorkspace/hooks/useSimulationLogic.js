@@ -10,7 +10,12 @@ export const useSimulationLogic = ({
   showToast,
   spawnConfig,
   setIsClearModalOpen,
-  activeTool
+  setIsFollowMenuOpen, // 🌟 เพิ่มเข้ามา
+  activeTool,
+  selectedObjectId,
+  setSelectedObjectId,
+  rulerPoints,
+  setRulerPoints
 }) => {
 
   const handleControlUpdate = useCallback((state) => {
@@ -138,15 +143,99 @@ export const useSimulationLogic = ({
          pushToHistory(simState);
          if (controlPanelRef.current?.removeObject) {
            controlPanelRef.current.removeObject(targetId);
+           if (targetId === selectedObjectId) setSelectedObjectId(null);
          }
       }
+    } else if (activeTool === 'focus') {
+      setIsFollowMenuOpen(false); 
+      setSelectedObjectId(null);
+    } else if (activeTool === 'cursor') {
+      const hitId = matterCanvasRef.current?.findObjectAt(wx, wy);
+      if (hitId) {
+        setSelectedObjectId(hitId);
+      } else {
+        setSelectedObjectId(null);
+      }
+    } else if (activeTool === 'ruler') {
+      const snapHit = matterCanvasRef.current?.findSnapPoint(wx, wy);
+      let fx, fy;
+      if (snapHit) {
+        fx = snapHit.x; fy = snapHit.y;
+      } else {
+        const snapped = simState?.gridSnapping;
+        fx = snapped ? Math.round(wx / unitStep) * unitStep : wx;
+        fy = snapped ? Math.round(wy / unitStep) * unitStep : wy;
+      }
+      pushToHistory(simState);
+      setRulerPoints(prev => [...prev, { x: fx, y: fy }]);
     }
-  }, [activeTool, simState, spawnConfig, bodiesRef, showToast, pushToHistory, controlPanelRef, matterCanvasRef]);
+  }, [activeTool, simState, spawnConfig, bodiesRef, showToast, pushToHistory, controlPanelRef, matterCanvasRef, setIsFollowMenuOpen, selectedObjectId, setSelectedObjectId, setRulerPoints]);
+
+  const handleGridRightClick = useCallback((wx, wy, unitStep = 1) => {
+    if (activeTool === 'ruler') {
+      // Find point hit
+      let targetIdx = -1;
+      const threshold = 0.5; // world meters
+      for (let i = 0; i < rulerPoints.length; i++) {
+        const p = rulerPoints[i];
+        const dist = Math.sqrt((wx - p.x)**2 + (wy - p.y)**2);
+        if (dist < threshold) {
+          targetIdx = i;
+          break;
+        }
+      }
+
+      if (targetIdx !== -1) {
+        setRulerPoints(prev => prev.filter((_, i) => i !== targetIdx));
+        return;
+      }
+
+      // Find segment hit
+      let segIdx = -1;
+      for (let i = 0; i < rulerPoints.length - 1; i++) {
+        const p1 = rulerPoints[i];
+        const p2 = rulerPoints[i+1];
+        // Dist point to segment
+        const A = wx - p1.x;
+        const B = wy - p1.y;
+        const C = p2.x - p1.x;
+        const D = p2.y - p1.y;
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+        if (lenSq !== 0) param = dot / lenSq;
+        let xx, yy;
+        if (param < 0) {
+          xx = p1.x; yy = p1.y;
+        } else if (param > 1) {
+          xx = p2.x; yy = p2.y;
+        } else {
+          xx = p1.x + param * C;
+          yy = p1.y + param * D;
+        }
+        const dx = wx - xx;
+        const dy = wy - yy;
+        if (Math.sqrt(dx*dx + dy*dy) < threshold) {
+          segIdx = i;
+          break;
+        }
+      }
+
+      if (segIdx !== -1) {
+        setRulerPoints(prev => {
+          const next = [...prev];
+          next.splice(segIdx, 2); // Remove both points of the segment
+          return next;
+        });
+      }
+    }
+  }, [activeTool, rulerPoints, setRulerPoints]);
 
   return {
     handleControlUpdate,
     updateVectorValue,
     handleClearAllConfirm,
-    handleGridClick
+    handleGridClick,
+    handleGridRightClick
   };
 };

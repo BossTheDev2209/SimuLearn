@@ -12,6 +12,7 @@ export const useZoomLogic = (
   onGridPointerMove, 
   onGridPointerUp, 
   onGridClick,
+  onGridRightClick,
   unitStep
 ) => {
   const [camera, setCamera] = useState({
@@ -56,10 +57,13 @@ export const useZoomLogic = (
   }, [containerRef, size]);
 
   const handlePointerDown = useCallback((e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 && e.button !== 2) return;
     const coords = getSimCoords(e);
     const consumed = onGridPointerDown?.(coords.wx, coords.wy, e, unitStep);
     
+    // 🌟 Disable panning while focusing to avoid camera jitter/conflict
+    if (activeTool === 'focus') return;
+
     if (activeTool === 'cursor' || !consumed) {
       setIsDragging(true);
       dragStartScreen.current = { x: e.clientX, y: e.clientY };
@@ -101,10 +105,12 @@ export const useZoomLogic = (
     const dy = e.clientY - dragStartScreen.current.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     
-    if ((activeTool !== 'cursor' || dist < 5) && onGridClick) {
+    if (e.button === 2 && onGridRightClick) {
+      onGridRightClick(coords.wx, coords.wy, unitStep);
+    } else if (e.button === 0 && (activeTool !== 'cursor' || dist < 5) && onGridClick) {
       onGridClick(coords.wx, coords.wy, unitStep);
     }
-  }, [getSimCoords, onGridPointerUp, activeTool, onGridClick, unitStep]);
+  }, [getSimCoords, onGridPointerUp, activeTool, onGridClick, onGridRightClick, unitStep]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();

@@ -95,7 +95,7 @@ export default function Timebar({
           
           {isTimebarOpen && (
             <>
-              <button onClick={onRestart} className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-lg mx-1.5 transition-colors shadow-sm" title="รีสตาร์ทเวลา">
+              <button onClick={onRestart} className="bg-[#FFB65A] hover:opacity-90 text-white p-1.5 rounded-lg mx-1.5 transition-all shadow-sm" title="รีสตาร์ทเวลา">
                 <RestartIcon />
               </button>
               

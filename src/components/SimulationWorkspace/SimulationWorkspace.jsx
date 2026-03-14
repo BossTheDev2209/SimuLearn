@@ -12,6 +12,7 @@ import { SpawnOverlay } from './UI/SpawnOverlay';
 import { FollowMenu } from './UI/FollowMenu';
 import { VectorTooltip } from './UI/VectorTooltip';
 import { TrackingSystem } from './UI/TrackingSystem';
+import { RulerSystem } from './UI/RulerSystem';
 import { SimulationTimeline } from './UI/SimulationTimeline';
 import { ClearModal } from './UI/ClearModal';
 
@@ -39,7 +40,9 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
   const {
     activeTool, vectorEditor, setVectorEditor, isToolbarOpen, setIsToolbarOpen,
     isClearModalOpen, setIsClearModalOpen, spawnToast, showToast, spawnConfig, setSpawnConfig,
-    followedObjectId, setFollowedObjectId, isFollowMenuOpen, setIsFollowMenuOpen, handleToolClick
+    followedObjectId, setFollowedObjectId, selectedObjectId, setSelectedObjectId,
+    rulerPoints, setRulerPoints,
+    isFollowMenuOpen, setIsFollowMenuOpen, handleToolClick
   } = workspaceState;
 
   const { pushToHistory, undoRef, redoRef } = useSimulationHistory(simState, setSimState, onSaveControlState);
@@ -56,14 +59,16 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
   const { bodiesRef, handleCameraChange, handleTeleport, handlePhysicsChange } = useCameraEngine(activeSim, followedObjectId, onSavePhysicsState, gridRef);
 
-  const { handleControlUpdate, updateVectorValue, handleClearAllConfirm, handleGridClick } = useSimulationLogic({
+  const { handleControlUpdate, updateVectorValue, handleClearAllConfirm, handleGridClick, handleGridRightClick } = useSimulationLogic({
     simState, setSimState, controlPanelRef, matterCanvasRef, bodiesRef, 
-    pushToHistory, showToast, spawnConfig, setIsClearModalOpen, activeTool
+    pushToHistory, showToast, spawnConfig, setIsClearModalOpen, setIsFollowMenuOpen, activeTool,
+    selectedObjectId, setSelectedObjectId, rulerPoints, setRulerPoints
   });
 
   const { handleGridPointerDown, handleGridPointerMove, handleGridPointerUp } = useVectorInteraction({
     activeTool, simState, matterCanvasRef, pushToHistory, controlPanelRef, 
-    setVectorEditor, followedObjectId, setFollowedObjectId
+    setVectorEditor, followedObjectId, setFollowedObjectId,
+    selectedObjectId, setSelectedObjectId
   });
 
   // Imperative Handle
@@ -72,7 +77,12 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
   }));
 
   // Effects
-  useEffect(() => { if (isPlaying) setVectorEditor(null); }, [isPlaying, setVectorEditor]);
+  useEffect(() => { 
+    if (isPlaying) {
+      setVectorEditor(null);
+      setSelectedObjectId(null);
+    } 
+  }, [isPlaying, setVectorEditor, setSelectedObjectId]);
   useEffect(() => { if (simState && onSaveControlState) onSaveControlState(simState); }, [simState, onSaveControlState]);
 
   const handleRestartRef = useRef(handleRestart);
@@ -95,10 +105,18 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
         const restored = redoRef.current?.();
         if (restored && controlPanelRef.current?.resetState) controlPanelRef.current.resetState(restored);
       }
+      if (e.code === 'Delete') {
+        if (selectedObjectId && controlPanelRef.current?.removeObject) {
+          e.preventDefault();
+          controlPanelRef.current.removeObject(selectedObjectId);
+          setSelectedObjectId(null);
+          showToast('ลบวัตถุที่เลือกแล้ว');
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePlay, undoRef, redoRef, displayTime, maxTime]);
+  }, [handleTogglePlay, undoRef, redoRef, displayTime, maxTime, selectedObjectId, setSelectedObjectId, showToast]);
 
   // UI rendering
   return (
@@ -113,7 +131,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
       <AnimatePresence>
         {spawnToast && (
-          <motion.div key={spawnToast.id} initial={{ opacity: 0, y: -20, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: -20, x: '-50%' }} className="absolute top-24 left-1/2 z-[200] bg-red-500 text-white px-5 py-2.5 rounded-xl shadow-2xl font-bold border-2 border-red-700/30 flex items-center gap-2 text-sm font-['Chakra_Petch']">
+          <motion.div key={spawnToast.id} initial={{ opacity: 0, y: -20, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: -20, x: '-50%' }} className="absolute top-24 left-1/2 z-[200] bg-[#FFB65A] text-white px-5 py-2.5 rounded-xl shadow-2xl font-bold border-2 border-[#FFB65A]/30 flex items-center gap-2 text-sm font-['Chakra_Petch']">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>{spawnToast.message}
           </motion.div>
         )}
@@ -134,17 +152,18 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
               <div className="absolute top-4 left-4 z-50 flex gap-2 items-start pointer-events-none">
                 <Toolbar activeTool={activeTool} isToolbarOpen={isToolbarOpen} setIsToolbarOpen={setIsToolbarOpen} handleToolClick={handleToolClick} />
                 <SpawnOverlay activeTool={activeTool} spawnConfig={spawnConfig} setSpawnConfig={setSpawnConfig} />
-                <FollowMenu isFollowMenuOpen={isFollowMenuOpen} setIsFollowMenuOpen={setIsFollowMenuOpen} simState={simState} followedObjectId={followedObjectId} setFollowedObjectId={setFollowedObjectId} />
+                <FollowMenu isFollowMenuOpen={isFollowMenuOpen} setIsFollowMenuOpen={setIsFollowMenuOpen} simState={simState} followedObjectId={followedObjectId} setFollowedObjectId={setFollowedObjectId} activeTool={activeTool} />
               </div>
 
-              <InteractiveGrid ref={gridRef} initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange} activeTool={activeTool} onGridClick={handleGridClick} onGridPointerDown={handleGridPointerDown} onGridPointerMove={handleGridPointerMove} onGridPointerUp={handleGridPointerUp}>
-                {({ size, offset, zoom, unitStep }) => (
+              <InteractiveGrid ref={gridRef} initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange} activeTool={activeTool} onGridClick={handleGridClick} onGridRightClick={handleGridRightClick} onGridPointerDown={handleGridPointerDown} onGridPointerMove={handleGridPointerMove} onGridPointerUp={handleGridPointerUp}>
+                {({ size, offset, zoom, unitStep, subStep }) => (
                   <>
                     <MatterCanvas 
-                      ref={matterCanvasRef} size={size} offset={offset} zoom={zoom} unitStep={unitStep} simState={simState} initialPhysics={activeSim.physicsState} onPhysicsChange={handlePhysicsChange} activeTool={activeTool} spawnConfig={spawnConfig}
-                      gridSnapping={!!simState?.gridSnapping} showCursorCoords={!!simState?.showCursorCoords} showResultantVector={!!simState?.showResultantVector} timeStateRef={timeStateRef} setIsPlaying={setIsPlaying} maxTime={maxTime} followedObjectId={followedObjectId}
+                      ref={matterCanvasRef} size={size} offset={offset} zoom={zoom} unitStep={subStep} simState={simState} initialPhysics={activeSim.physicsState} onPhysicsChange={handlePhysicsChange} activeTool={activeTool} spawnConfig={spawnConfig}
+                      gridSnapping={!!simState?.gridSnapping} showCursorCoords={!!simState?.showCursorCoords} showResultantVector={!!simState?.showResultantVector} timeStateRef={timeStateRef} setIsPlaying={setIsPlaying} maxTime={maxTime} followedObjectId={followedObjectId} selectedObjectId={selectedObjectId}
                     />
-                    <TrackingSystem objects={simState?.objects} bodies={bodiesRef.current} offset={offset} zoom={zoom} size={size} onTeleport={handleTeleport} />
+                    <TrackingSystem objects={simState?.objects} bodies={bodiesRef.current} offset={offset} zoom={zoom} size={size} onTeleport={handleTeleport} showOffScreenIndicators={!!simState?.showOffScreenIndicators} />
+                    <RulerSystem rulerPoints={rulerPoints} setRulerPoints={setRulerPoints} activeTool={activeTool} offset={offset} zoom={zoom} size={size} unitStep={subStep} matterCanvasRef={matterCanvasRef} />
                     <VectorTooltip vectorEditor={vectorEditor} setVectorEditor={setVectorEditor} updateVectorValue={updateVectorValue} />
                   </>
                 )}

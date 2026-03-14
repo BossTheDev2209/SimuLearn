@@ -15,6 +15,8 @@ export const useWorkspaceState = () => {
   });
 
   const [followedObjectId, setFollowedObjectId] = useState(null);
+  const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const [rulerPoints, setRulerPoints] = useState([]);
   const [isFollowMenuOpen, setIsFollowMenuOpen] = useState(false);
 
   const showToast = useCallback((message) => {
@@ -28,12 +30,23 @@ export const useWorkspaceState = () => {
   const handleToolClick = useCallback((toolId) => {
     if (toolId === 'clearAll') {
       setIsClearModalOpen(true);
-    } else if (toolId === 'focus') {
-      setIsFollowMenuOpen(prev => !prev);
-    } else {
-      setActiveTool(toolId);
+      return;
     }
-  }, []);
+
+    const isTogglingOff = activeTool === toolId;
+    const nextTool = isTogglingOff ? 'cursor' : toolId;
+
+    if (toolId === 'focus' && !isTogglingOff) {
+      const isOpening = !isFollowMenuOpen;
+      setActiveTool('focus');
+      setIsFollowMenuOpen(isOpening);
+    } else {
+      setActiveTool(nextTool);
+      setIsFollowMenuOpen(false);
+      if (nextTool !== 'cursor') setSelectedObjectId(null);
+      if (nextTool !== 'ruler') setRulerPoints([]);
+    }
+  }, [activeTool, isFollowMenuOpen]);
 
   return {
     activeTool, setActiveTool,
@@ -43,6 +56,8 @@ export const useWorkspaceState = () => {
     spawnToast, setSpawnToast,
     spawnConfig, setSpawnConfig,
     followedObjectId, setFollowedObjectId,
+    selectedObjectId, setSelectedObjectId,
+    rulerPoints, setRulerPoints,
     isFollowMenuOpen, setIsFollowMenuOpen,
     showToast,
     handleToolClick

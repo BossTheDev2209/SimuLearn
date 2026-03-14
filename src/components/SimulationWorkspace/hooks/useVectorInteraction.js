@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 
 export const useVectorInteraction = ({
   activeTool,
@@ -8,8 +8,12 @@ export const useVectorInteraction = ({
   controlPanelRef,
   setVectorEditor,
   followedObjectId,
-  setFollowedObjectId
+  setFollowedObjectId,
+  selectedObjectId,
+  setSelectedObjectId
 }) => {
+  const dragRef = useRef(null);
+
   const handleGridPointerDown = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
       let nx = wx, ny = wy;
@@ -24,10 +28,23 @@ export const useVectorInteraction = ({
       return hit || false;
     }
 
-    if (followedObjectId) setFollowedObjectId(null);
+    if (activeTool === 'cursor') {
+      const hitId = matterCanvasRef.current?.findObjectAt(wx, wy);
+      if (hitId) {
+        // Start dragging
+        dragRef.current = { 
+          objId: hitId, 
+          startX: wx, 
+          startY: wy, 
+          hasMoved: false 
+        };
+        setSelectedObjectId(hitId);
+        return true;
+      }
+    }
 
     return false;
-  }, [activeTool, simState?.gridSnapping, followedObjectId, setFollowedObjectId, matterCanvasRef]);
+  }, [activeTool, simState?.gridSnapping, followedObjectId, setFollowedObjectId, setSelectedObjectId, matterCanvasRef]);
 
   const handleGridPointerMove = useCallback((wx, wy, e, unitStep = 1) => {
     if (activeTool === 'velocity' || activeTool === 'force') {
@@ -40,6 +57,15 @@ export const useVectorInteraction = ({
          ny = Math.round(wy / unitStep) * unitStep;
       }
       matterCanvasRef.current?.moveVectorDrag(nx, ny);
+    } else if (activeTool === 'cursor' && dragRef.current) {
+      const d = dragRef.current;
+      d.hasMoved = true;
+      let nx = wx, ny = wy;
+      if (simState?.gridSnapping) {
+        nx = Math.round(wx / unitStep) * unitStep;
+        ny = Math.round(wy / unitStep) * unitStep;
+      }
+      matterCanvasRef.current?.teleportObject(d.objId, nx, ny);
     }
   }, [activeTool, simState?.gridSnapping, matterCanvasRef]);
 
@@ -74,14 +100,18 @@ export const useVectorInteraction = ({
             controlPanelRef.current.updateObjectValues(v.objId, newValues);
           }
           setVectorEditor({ 
-              objId: v.objId, type: v.type, index: vIdx,
-              magnitude, angle, screenX: e.clientX, screenY: e.clientY 
+            objId: v.objId, type: v.type, index: vIdx,
+            magnitude, angle, screenX: e.clientX, screenY: e.clientY 
           });
         }
       } else {
         setVectorEditor(null);
       }
     } else if (activeTool === 'cursor') {
+      if (dragRef.current?.hasMoved) {
+        pushToHistory(simState);
+      }
+      dragRef.current = null;
       setVectorEditor(null);
     }
   }, [activeTool, simState, pushToHistory, setVectorEditor, matterCanvasRef, controlPanelRef]);

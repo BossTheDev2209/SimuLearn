@@ -46,8 +46,8 @@ export const ObjectItem = memo(({ obj, idx, isLocked, presetProps, activePickerI
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
           </button>
         )}
-        <button onClick={() => removeObject(obj.id)} disabled={isLocked} className={`ml-auto p-1 rounded transition-colors ${isLocked ? 'text-theme-muted opacity-40 cursor-not-allowed' : 'text-theme-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'}`} title="ลบวัตถุ">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        <button onClick={() => removeObject(obj.id)} disabled={isLocked} className={`ml-auto p-1 rounded transition-colors ${isLocked ? 'text-theme-muted opacity-40 cursor-not-allowed' : 'text-theme-muted hover:text-[#FFB65A] hover:bg-[#FFB65A]/10'}`} title="ลบวัตถุ">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
         </button>
       </div>
 
@@ -58,7 +58,7 @@ export const ObjectItem = memo(({ obj, idx, isLocked, presetProps, activePickerI
         return <SliderRow key={prop.key} label={prop.label} unit={prop.unit} value={val} min={prop.min} max={prop.max} step={prop.step} onChange={(v) => updateObjectValue(obj.id, prop.key, v)} disabled={isLocked} />;
       })}
 
-      <button onClick={() => removeObject(obj.id)} disabled={isLocked} className={`mt-2 mb-1 w-full py-2 rounded-lg text-[13px] font-bold transition-all border ${isLocked ? 'bg-gray-100 text-gray-400 border-gray-200 dark:bg-[#3F4147] dark:text-gray-500 dark:border-transparent opacity-50 cursor-not-allowed' : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-500 hover:text-white dark:bg-red-900/10 dark:border-red-800/30 dark:hover:bg-red-600 dark:hover:text-white'}`}>ลบออกจากฉาก</button>
+      <button onClick={() => removeObject(obj.id)} disabled={isLocked} className={`mt-2 mb-1 w-full py-2 rounded-lg text-[13px] font-bold transition-all border ${isLocked ? 'bg-gray-100 text-gray-400 border-gray-200 dark:bg-[#3F4147] dark:text-gray-500 dark:border-transparent opacity-50 cursor-not-allowed' : 'bg-[#FFB65A]/10 text-[#FFB65A] border-[#FFB65A]/30 hover:bg-[#FFB65A] hover:text-white dark:bg-[#FFB65A]/10 dark:hover:bg-[#FFB65A] dark:hover:text-white'}`}>ลบออกจากฉาก</button>
 
       <div className="mt-3 bg-gray-50 dark:bg-[#1E1F22] rounded-lg p-2 border border-theme-border">
         <div className="flex justify-between items-center mb-1.5 px-1"><span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider">Vectors Outline</span></div>
@@ -67,7 +67,7 @@ export const ObjectItem = memo(({ obj, idx, isLocked, presetProps, activePickerI
             <div key={`v-${i}`} className="flex items-center gap-2 group">
               <div className="w-2 h-2 rounded-full bg-blue-500 shadow-sm" />
               <span className="text-[11px] text-theme-primary font-bold">V {i+1}:</span><span className="text-[11px] text-theme-muted">{v.magnitude}m/s , {v.angle}°</span>
-              <button onClick={() => removeObjectValue(obj.id, 'velocities', i)} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              <button onClick={() => removeObjectValue(obj.id, 'velocities', i)} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-[#FFB65A] transition-all"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             </div>
           ))}
           {(obj.values?.forces || []).map((f, i) => (
@@ -97,6 +97,7 @@ export const GlobalSettings = memo(({ isLocked, state, setters }) => (
       <ToggleRow label="สแนปเมาส์เข้ากับตาราง" checked={state.gridSnapping} onChange={setters.setGridSnapping} />
       <ToggleRow label="แสดงพิกัดตามเมาส์" checked={state.showCursorCoords} onChange={setters.setShowCursorCoords} />
       <ToggleRow label="แสดงผลรวมเวกเตอร์" checked={state.showResultantVector} onChange={setters.setShowResultantVector} />
+      <ToggleRow label="แสดงตำแหน่งวัตถุนอกระยะ" checked={state.showOffScreenIndicators} onChange={setters.setShowOffScreenIndicators} />
     </div>
   </div>
 ));

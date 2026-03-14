@@ -14,15 +14,12 @@ const InteractiveGrid = forwardRef(({
   onGridPointerDown, 
   onGridPointerMove, 
   onGridPointerUp, 
+  onGridRightClick,
   style = {} 
 }, ref) => {
   const containerRef = useRef(null);
-  
-  // Calculate specific grid step based on zoom
   const PIXELS_PER_METER = 100;
-  const initialZoom = initialCamera?.zoom || 1;
-  const unitStep = niceStep(100 / (PIXELS_PER_METER * initialZoom));
-
+  
   const { 
     offset, zoom, size, isDragging, 
     handlePointerDown, handlePointerMove, handlePointerUp, handleWheel,
@@ -36,8 +33,13 @@ const InteractiveGrid = forwardRef(({
     onGridPointerMove, 
     onGridPointerUp, 
     onGridClick, 
-    unitStep
+    onGridRightClick,
+    niceStep(100 / (PIXELS_PER_METER * (initialCamera?.zoom || 1))) / 5 // initial subStep
   );
+
+  // Snapping steps based on current zoom
+  const unitStep = niceStep(100 / (PIXELS_PER_METER * zoom));
+  const subStep = unitStep / 5;
 
   // Expose setCamera to parents (for Following feature)
   useImperativeHandle(ref, () => ({
@@ -68,11 +70,12 @@ const InteractiveGrid = forwardRef(({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <GridView size={size} offset={offset} zoom={zoom} />
       
       {/* Function children support common in deconstructed patterns */}
-      {typeof children === 'function' ? children({ size, offset, zoom, unitStep }) : children}
+      {typeof children === 'function' ? children({ size, offset, zoom, unitStep, subStep }) : children}
     </div>
   );
 });

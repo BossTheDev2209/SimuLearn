@@ -19,6 +19,7 @@ export function useControlPanelState(initialState, simulationType, onUpdate) {
   const [gridSnapping, setGridSnapping] = useState(initialState?.gridSnapping ?? false);
   const [showCursorCoords, setShowCursorCoords] = useState(initialState?.showCursorCoords ?? false);
   const [showResultantVector, setShowResultantVector] = useState(initialState?.showResultantVector ?? true);
+  const [showOffScreenIndicators, setShowOffScreenIndicators] = useState(initialState?.showOffScreenIndicators ?? true);
   const [groundFriction, setGroundFriction] = useState(initialState?.groundFriction ?? 0);
 
   useEffect(() => { objectCounterRef.current = objectCounter; }, [objectCounter]);
@@ -26,13 +27,16 @@ export function useControlPanelState(initialState, simulationType, onUpdate) {
   const lastUpdateRef = useRef(null);
   useEffect(() => {
     if (onUpdate) {
-      const stateStr = JSON.stringify({ objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction });
+      const stateStr = JSON.stringify({ 
+        objects, gravity, airResistance, showCoordinates, showTrajectory, 
+        gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction 
+      });
       if (lastUpdateRef.current !== stateStr) {
         lastUpdateRef.current = stateStr;
         onUpdate(JSON.parse(stateStr));
       }
     }
-  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction, onUpdate]);
+  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction, onUpdate]);
 
   const updateObjectValue = useCallback((objId, key, value) => setObjects((prev) => prev.map((o) => (o.id === objId ? { ...o, values: { ...o.values, [key]: value } } : o))), []);
   const removeObjectValue = useCallback((objId, key, index) => setObjects((prev) => prev.map((o) => {
@@ -69,13 +73,14 @@ export function useControlPanelState(initialState, simulationType, onUpdate) {
       if (newState.gravity !== undefined) setGravity(newState.gravity);
       if (newState.airResistance !== undefined) setAirResistance(newState.airResistance);
       if (newState.groundFriction !== undefined) setGroundFriction(newState.groundFriction);
+      if (newState.showOffScreenIndicators !== undefined) setShowOffScreenIndicators(newState.showOffScreenIndicators);
       // ... sync other settings as needed
     }
   };
 
   return {
-    state: { objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, groundFriction, activePickerId, presetProps },
-    setters: { setGravity, setAirResistance, setShowCoordinates, setShowTrajectory, setGridSnapping, setShowCursorCoords, setShowResultantVector, setGroundFriction, setActivePickerId },
+    state: { objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction, activePickerId, presetProps },
+    setters: { setGravity, setAirResistance, setShowCoordinates, setShowTrajectory, setGridSnapping, setShowCursorCoords, setShowResultantVector, setShowOffScreenIndicators, setGroundFriction, setActivePickerId },
     actions: { updateObjectValue, removeObjectValue, removeObject, updateObjectColor, updateObjectShape, updateObjectSize, startRename, finishRename },
     refs: { anchorRefs },
     imperativeMethods

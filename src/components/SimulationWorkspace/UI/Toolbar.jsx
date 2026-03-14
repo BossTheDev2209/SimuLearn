@@ -10,7 +10,7 @@ const tools = [
   { id: 'force', title: 'เวกเตอร์แรง', color: 'text-red-500', icon: <><path d="M7 7h10v10"/><path d="M7 17 17 7"/></> },
   { type: 'divider' },
   { id: 'focus', title: 'ติดตามวัตถุ (F)', color: 'text-[#FFB65A]', icon: <><circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></> },
-  { id: 'clearAll', title: 'ลบวัตถุทั้งหมด', color: 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30', icon: <><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></> }
+  { id: 'clearAll', title: 'ลบวัตถุทั้งหมด', color: 'text-[#FFB65A] hover:bg-[#FFB65A]/10 dark:hover:bg-[#FFB65A]/20', icon: <><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></> }
 ];
 
 export const Toolbar = ({ activeTool, isToolbarOpen, handleToolClick, setIsToolbarOpen }) => {

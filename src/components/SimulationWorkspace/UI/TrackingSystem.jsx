@@ -1,45 +1,117 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { PIXELS_PER_METER } from '../constants';
 
-export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport }) => {
-  if (!objects || !bodies) return null;
+export const TrackingSystem = ({ objects, bodies, offset, zoom, size, onTeleport, showOffScreenIndicators }) => {
+  const offScreenIndicators = useMemo(() => {
+    if (!objects || !bodies || showOffScreenIndicators === false) return [];
+
+    const indicators = [];
+    const margin = 50;
+    const PPM_ZOOMED = PIXELS_PER_METER * zoom;
+
+    objects.forEach(obj => {
+      const body = bodies[obj.id];
+      if (!body) return;
+
+      // body.position เป็น world meters (Y-up) แล้ว
+      const screenX = (body.position.x * PPM_ZOOMED) + (size.w / 2 + offset.x);
+      const screenY = (size.h / 2 + offset.y) - (body.position.y * PPM_ZOOMED);
+
+      const isOffScreen =
+        screenX < margin || screenX > size.w - margin ||
+        screenY < margin || screenY > size.h - margin;
+      if (!isOffScreen) return;
+
+      indicators.push({
+        id: obj.id,
+        name: obj.name || 'วัตถุ',
+        color: obj.color,
+        pos: { x: body.position.x, y: body.position.y }, // world meters
+        screen: { x: screenX, y: screenY },
+        edge: {
+          x: Math.max(margin, Math.min(size.w - margin, screenX)),
+          y: Math.max(margin, Math.min(size.h - margin, screenY)),
+        },
+      });
+    });
+
+    // Cluster indicators that are close to each other on screen edge
+    const clusters = [];
+    const used = new Set();
+    indicators.forEach((ind, i) => {
+      if (used.has(ind.id)) return;
+      const cluster = [ind];
+      used.add(ind.id);
+      for (let j = i + 1; j < indicators.length; j++) {
+        const other = indicators[j];
+        if (used.has(other.id)) continue;
+        // ✅ เปรียบเทียบระยะห่างระหว่าง edge positions (screen px) ไม่ใช่ camera distance
+        const dx = ind.edge.x - other.edge.x;
+        const dy = ind.edge.y - other.edge.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 60) {
+          cluster.push(other);
+          used.add(other.id);
+        }
+      }
+      clusters.push(cluster);
+    });
+
+    return clusters;
+  }, [objects, bodies, offset, zoom, size]);
+
+  if (offScreenIndicators.length === 0) return null;
+
   return (
-    <div className="absolute inset-0 pointer-events-none z-[400]">
-      {objects.map(obj => {
-        const body = bodies[obj.id];
-        if (!body) return null;
+    <div className="absolute inset-0 pointer-events-none z-10 font-['Chakra_Petch']">
+      {offScreenIndicators.map(cluster => {
+        const lead = cluster[0];
+        const isCluster = cluster.length > 1;
 
-        const screenX = (body.position.x * PIXELS_PER_METER * zoom) + (size.w / 2 + offset.x);
-        const screenY = (size.h / 2 + offset.y) - (body.position.y * PIXELS_PER_METER * zoom);
-        
-        const margin = 40;
-        const isOffScreen = screenX < margin || screenX > size.w - margin || screenY < margin || screenY > size.h - margin;
-        
-        if (!isOffScreen) return null;
+        // คำนวณระยะห่างจากกล้องถึงวัตถุ (world meters)
+        const PPM_ZOOMED = PIXELS_PER_METER * zoom;
+        const camX = -offset.x / PPM_ZOOMED;
+        const camY =  offset.y / PPM_ZOOMED;
+        const dx = lead.pos.x - camX;
+        const dy = lead.pos.y - camY;
+        const dist = Math.sqrt(dx * dx + dy * dy).toFixed(1);
+        const opacity = Math.max(0.6, 1 - (dist / 1500));
 
-        const edgeX = Math.max(margin, Math.min(size.w - margin, screenX));
-        const edgeY = Math.max(margin, Math.min(size.h - margin, screenY));
-        
-        const dx = body.position.x - ((-offset.x) / (PIXELS_PER_METER * zoom));
-        const dy = body.position.y - (offset.y / (PIXELS_PER_METER * zoom));
-        const dist = Math.sqrt(dx*dx + dy*dy).toFixed(1);
-        const opacity = Math.max(0.35, 1 - (dist / 1000));
+        const avgX = cluster.reduce((sum, item) => sum + item.edge.x, 0) / cluster.length;
+        const avgY = cluster.reduce((sum, item) => sum + item.edge.y, 0) / cluster.length;
 
         return (
-          <div key={obj.id} className="absolute flex items-center gap-2 pointer-events-auto" style={{ left: edgeX, top: edgeY, opacity, transform: 'translate(-50%, -50%)' }}>
-            <div 
-              className="w-0 h-0 border-y-[6px] border-y-transparent border-r-[10px]" 
-              style={{ borderRightColor: obj.color, transform: `rotate(${Math.atan2(screenY - edgeY, screenX - edgeX)}rad)` }} 
+          <div
+            key={lead.id}
+            onClick={(e) => { e.stopPropagation(); onTeleport(lead.pos.x, lead.pos.y); }}
+            className="absolute flex items-center gap-2 pointer-events-auto cursor-pointer group active:scale-95 transition-transform"
+            style={{ left: avgX, top: avgY, opacity, transform: 'translate(-50%, -50%)' }}
+          >
+            {/* Directional Arrow */}
+            <div
+              className="w-0 h-0 border-y-[7px] border-y-transparent border-r-[12px] shrink-0 shadow-sm transition-transform group-hover:scale-110"
+              style={{
+                borderRightColor: lead.color,
+                transform: `rotate(${Math.atan2(lead.screen.y - avgY, lead.screen.x - avgX)}rad)`,
+              }}
             />
-            <div className="bg-black/70 text-white text-[10px] px-2 py-1 rounded-lg flex items-center gap-2 backdrop-blur-md border border-white/10 shadow-xl">
-              <span className="font-bold">{dist}m</span>
-              <button 
-                onClick={(e) => { e.stopPropagation(); onTeleport(body.position.x, body.position.y); }}
-                className="w-4 h-4 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
-                title="Teleport to Object"
+
+            {/* Info Pill */}
+            <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/20 shadow-xl transition-all group-hover:bg-opacity-90 ${isCluster ? 'bg-[#FFB65A] text-gray-900' : 'bg-black/80 text-white'}`}>
+              <div className="flex flex-col leading-tight">
+                <span className="text-[11px] font-bold whitespace-nowrap">
+                  {isCluster ? `${cluster.length} วัตถุ` : lead.name}
+                </span>
+                <span className={`text-[9px] font-bold ${isCluster ? 'text-gray-800/80' : 'text-[#FFB65A]'}`}>
+                  {dist}m
+                </span>
+              </div>
+
+              {/* Teleport Visual Circle */}
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-inner ${isCluster ? 'bg-black/10' : 'bg-white/10'}`}
               >
-                <div className="w-1.5 h-1.5 rounded-full bg-white" />
-              </button>
+                <div className={`w-2 h-2 rounded-full border-2 ${isCluster ? 'border-black/60' : 'border-white/80'}`} />
+              </div>
             </div>
           </div>
         );
