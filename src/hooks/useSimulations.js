@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../firebase';
-import { doc, deleteDoc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc, setDoc, serverTimestamp, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { getSimulationTemplate } from "../simulations/SimulationRegistry.js";
 
 export default function useSimulations(myUserId) {
@@ -42,13 +42,21 @@ export default function useSimulations(myUserId) {
       
       if (!myUserId.startsWith("guest_")) {
         try {
-          console.log("📡 Fetching history from API...");
-          const res = await fetch(`/api/history/${myUserId}`, { signal: controller.signal });
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
-          const apiHistory = await res.json();
+          console.log("📡 Fetching history directly from Firestore...");
+          const q = query(
+            collection(db, "simulations"), 
+            where("userId", "==", myUserId),
+            orderBy("createdAt", "desc")
+          );
+          
+          const querySnapshot = await getDocs(q);
+          const apiHistory = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
 
           if (!Array.isArray(apiHistory)) {
-            console.warn("❌ API returned non-array:", apiHistory);
+            console.warn("❌ Firestore returned non-array:", apiHistory);
             return;
           }
 
@@ -63,7 +71,14 @@ export default function useSimulations(myUserId) {
               const id = (item?.id || item?._id || "").toString();
               if (!id || seenIds.has(id)) return null;
 
-              const timestampGroup = Math.floor(new Date(item.createdAt?._seconds ? item.createdAt._seconds * 1000 : item.createdAt).getTime() / 5000);
+              const getJsDate = (val) => {
+                if (!val) return new Date();
+                if (val.toDate) return val.toDate(); 
+                if (val._seconds) return new Date(val._seconds * 1000);
+                return new Date(val);
+              };
+              const date = getJsDate(item.createdAt);
+              const timestampGroup = Math.floor(date.getTime() / 5000);
               const contentKey = `${item.title}-${timestampGroup}`;
               
               if (seenContents.has(contentKey)) {
@@ -95,7 +110,7 @@ export default function useSimulations(myUserId) {
                 id,
                 title: item?.title || "แบบจำลองของฉัน",
                 userId: item?.userId,
-                createdAt: item?.createdAt?._seconds ? new Date(item.createdAt._seconds * 1000) : new Date(item?.createdAt || Date.now()),
+                createdAt: date,
                 data: parsedData,
                 physicsState: item?.physicsState || null,
                 controlState: item?.controlState || null
@@ -197,7 +212,7 @@ export default function useSimulations(myUserId) {
     abortControllerRef.current = new AbortController();
 
     try {
-      const res = await fetch(`/api/generate-simulation`, {
+      const res = await fetch(`https://simulearn-backend.onrender.com/api/generate-simulation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: text, userId: myUserId }),
