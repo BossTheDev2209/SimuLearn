@@ -189,26 +189,14 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, timeState, setIsPlay
     }
   }
 
-  // Nothing spawned → stop immediately
-  if (!hasActiveObject) {
-    const spawnedCount = state?.objects?.filter(o => o.isSpawned).length || 0;
-    // Only stop if we really have no objects OR we have objects but they've all settled/gone
-    // We check bodyMap.size > 0 to see if we've actually synced bodies yet
-    if (spawnedCount === 0 || (bodyMap && bodyMap.size > 0)) {
-      timeState.isPlaying = false;
-      setIsPlaying(false);
-    }
-    // Else: we have objects but bodyMap is empty? We are probably mid-sync (e.g. after restart). 
-    // Just skip this tick but stay playing.
-    return;
-  }
+  // No active objects (either none spawned or all settled)
+  // We used to stop here, but the user wants the timer to continue counting.
+  // We still return to avoid Matter.Engine.update if there's nothing to update,
+  // but we don't stop the 'isPlaying' state.
+  if (!hasActiveObject) return;
 
-  // All settled or time exceeded → stop
-  if (allSettled) {
-    timeState.isPlaying = false;
-    setIsPlaying(false);
-    return;
-  }
+  if (allSettled) return;
+
 
   // ── Damping Logic (Air, Ground, Energy Conservation) ───────────────────────
   const AIR_DAMP_VAL = state?.airResistance ? DEFAULT_SETTINGS.AIR_DAMPING : 0;

@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, me
 import Matter from 'matter-js';
 import { PIXELS_PER_METER, renderObjectVectors, drawArrow } from './VectorRenderer';
 import { createPhysicsEngine, createGround, updatePhysics, worldToMatter, matterToWorld, computeGravityY } from './PhysicsEngine';
+import { formatScientific } from '../../../utils/format';
+
 
 const pointToSegmentDistance = (px, py, x1, y1, x2, y2) => {
   const l2 = (x1 - x2) ** 2 + (y1 - y2) ** 2;
@@ -548,13 +550,32 @@ const MatterCanvas = forwardRef(({
       if (showCursorCoords && mouseRef.current.x > -1000) {
         const wx = (mouseRef.current.x - ox) / PPM_ZOOMED;
         const wy = (oy - mouseRef.current.y) / PPM_ZOOMED;
-        const text = `${wx.toFixed(1)}m, ${wy.toFixed(1)}m`;
-        ctx.font = '12px "Chakra Petch"';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(mouseRef.current.x + 15, mouseRef.current.y + 15, ctx.measureText(text).width + 10, 20);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(text, mouseRef.current.x + 20, mouseRef.current.y + 30);
+        const text = `${formatScientific(wx)}m, ${formatScientific(wy)}m`;
+        
+        ctx.save();
+        ctx.font = '12px "Chakra Petch", sans-serif';
+        const metrics = ctx.measureText(text);
+        const padding = 6;
+        const rectW = metrics.width + padding * 2;
+        const rectH = 20;
+        
+        const rx = mouseRef.current.x + 15;
+        const ry = mouseRef.current.y + 15;
+
+        // Draw Background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, rectW, rectH, 4);
+        ctx.fill();
+        
+        // Draw Text
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, rx + padding, ry + rectH / 2);
+        ctx.restore();
       }
+
 
       // Add Tool Hologram Preview
       if (activeTool === 'add' && spawnConfig && mouseRef.current.x > -1000) {

@@ -16,6 +16,8 @@ const InteractiveGrid = forwardRef(({
   onGridPointerUp, 
   onGridRightClick,
   onGridDoubleClick,
+  showCoordinates = true,
+  isTracking = false,
   style = {} 
 }, ref) => {
   const containerRef = useRef(null);
@@ -36,8 +38,10 @@ const InteractiveGrid = forwardRef(({
     onGridClick, 
     onGridRightClick,
     onGridDoubleClick,
-    niceStep(100 / (PIXELS_PER_METER * (initialCamera?.zoom || 1))) / 5 // initial subStep
+    niceStep(100 / (PIXELS_PER_METER * (initialCamera?.zoom || 1))) / 5, // initial subStep
+    isTracking
   );
+
 
   // Snapping steps based on current zoom
   const unitStep = niceStep(100 / (PIXELS_PER_METER * zoom));
@@ -79,7 +83,7 @@ const InteractiveGrid = forwardRef(({
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <GridView size={size} offset={offset} zoom={zoom} />
+      <GridView size={size} offset={offset} zoom={zoom} showCoordinates={showCoordinates} />
       
       {/* Function children support common in deconstructed patterns */}
       {typeof children === 'function' ? children({ size, offset, zoom, unitStep, subStep }) : children}

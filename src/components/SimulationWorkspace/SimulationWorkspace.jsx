@@ -191,7 +191,21 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
                 <FollowMenu isFollowMenuOpen={isFollowMenuOpen} setIsFollowMenuOpen={setIsFollowMenuOpen} simState={simState} followedObjectId={followedObjectId} setFollowedObjectId={setFollowedObjectId} activeTool={activeTool} />
               </div>
 
-              <InteractiveGrid ref={gridRef} initialCamera={activeSim.physicsState?.camera} onCameraChange={handleCameraChange} activeTool={activeTool} onGridClick={handleGridClick} onGridRightClick={handleGridRightClick} onGridDoubleClick={handleGridDoubleClick} onGridPointerDown={handleGridPointerDown} onGridPointerMove={handleGridPointerMove} onGridPointerUp={handleGridPointerUp}>
+              <InteractiveGrid 
+                ref={gridRef} 
+                initialCamera={activeSim.physicsState?.camera} 
+                onCameraChange={handleCameraChange} 
+                activeTool={activeTool} 
+                onGridClick={handleGridClick} 
+                onGridRightClick={handleGridRightClick} 
+                onGridDoubleClick={handleGridDoubleClick} 
+                onGridPointerDown={handleGridPointerDown} 
+                onGridPointerMove={handleGridPointerMove} 
+                onGridPointerUp={handleGridPointerUp} 
+                showCoordinates={!!simState?.showCoordinates}
+                isTracking={!!followedObjectId}
+              >
+
                 {({ size, offset, zoom, unitStep, subStep }) => (
                   <>
                     <MatterCanvas 

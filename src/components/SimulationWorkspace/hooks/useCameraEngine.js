@@ -60,10 +60,11 @@ export const useCameraEngine = (activeSim, followedObjectId, onSavePhysicsState,
           };
         }
 
-        cameraRef.current = { ...cameraRef.current, offset: newOffset };
-        gridRef.current?.setCamera({ ...cameraRef.current });
+        // ✅ Use functional update to avoid overwriting zoom state during scroll interaction
+        gridRef.current?.setCamera(prev => ({ ...prev, offset: newOffset }));
       }
     }
+
 
     if (onSavePhysicsState) {
       onSavePhysicsState({ camera: cameraRef.current, bodies: bodiesRef.current }, false, isMoving);

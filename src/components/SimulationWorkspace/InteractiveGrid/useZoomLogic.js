@@ -14,8 +14,10 @@ export const useZoomLogic = (
   onGridClick,
   onGridRightClick,
   onGridDoubleClick,
-  unitStep
+  unitStep,
+  disablePanning = false
 ) => {
+
   const [camera, setCamera] = useState({
     offset: initialCamera?.offset || { x: 0, y: 0 },
     zoom: initialCamera?.zoom || 1
@@ -63,9 +65,10 @@ export const useZoomLogic = (
     const consumed = onGridPointerDown?.(coords.wx, coords.wy, e, unitStep);
     
     // 🌟 Disable panning while focusing to avoid camera jitter/conflict
-    if (activeTool === 'focus') return;
+    if (activeTool === 'focus' || disablePanning) return;
 
     if (!consumed) {
+
       setIsDragging(true);
       dragStartScreen.current = { x: e.clientX, y: e.clientY };
       dragStartOffset.current = { ...cameraRef.current.offset };
@@ -126,10 +129,18 @@ export const useZoomLogic = (
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     
     setCamera(prev => {
+      const newZoom = Math.min(Math.max(prev.zoom * factor, 0.05), 50);
+
+      // If we are tracking (panning disabled), don't change the offset.
+      // This allows the follow logic to be the sole master of the offset,
+      // and zooming will effectively be relative to the screen center (the object).
+      if (disablePanning) {
+        return { ...prev, zoom: newZoom };
+      }
+
       const wx = (screenX - (size.w / 2 + prev.offset.x)) / (PIXELS_PER_METER * prev.zoom);
       const wy = ((size.h / 2 + prev.offset.y) - screenY) / (PIXELS_PER_METER * prev.zoom);
       
-      const newZoom = Math.min(Math.max(prev.zoom * factor, 0.05), 50);
       return {
         zoom: newZoom,
         offset: {
@@ -138,7 +149,8 @@ export const useZoomLogic = (
         }
       };
     });
-  }, [size, containerRef]);
+  }, [size, containerRef, disablePanning]);
+
 
   useEffect(() => {
     onCameraChange?.(camera);
