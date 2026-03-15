@@ -286,6 +286,10 @@ const MatterCanvas = forwardRef(({
     let lastTime = performance.now();
     let accumulator = 0;
     const FIXED_DELTA_MS = 1000 / 60;
+    
+    // To support smooth interpolation
+    const prevStates = new Map(); // id -> { x, y, angle }
+    const currentStates = new Map(); // id -> { x, y, angle }
 
     const loop = (now) => {
       const delta = Math.min(now - lastTime, 100);
@@ -293,14 +297,26 @@ const MatterCanvas = forwardRef(({
 
       if (timeStateRef.current?.isPlaying) {
         accumulator += delta * (timeStateRef.current.timeScale || 1);
+        
         while (accumulator >= FIXED_DELTA_MS) {
+          // Sync current to prev before update
+          for (const [id, body] of bodyMap.current) {
+            prevStates.set(id, { x: body.position.x, y: body.position.y, angle: body.angle });
+          }
+
           const status = updatePhysics(engine, FIXED_DELTA_MS, loopPropsRef.current.simState, bodyMap.current, timeStateRef.current, setIsPlaying);
           
           if (status === 'crash') {
             timeStateRef.current.isPlaying = false;
             setIsPlaying(false);
             onCrash?.();
+            accumulator = 0;
             break;
+          }
+
+          // Update current states
+          for (const [id, body] of bodyMap.current) {
+            currentStates.set(id, { x: body.position.x, y: body.position.y, angle: body.angle });
           }
 
           timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
@@ -376,22 +392,51 @@ const MatterCanvas = forwardRef(({
         });
       }
 
+      // Interpolation alpha
+      const alpha = timeStateRef.current?.isPlaying ? (accumulator / FIXED_DELTA_MS) : 0;
+
       // Draw Bodies
       Matter.Composite.allBodies(engine.world).forEach(body => {
         if (body.label === 'ground') return;
         const objId = [...bodyMap.current.entries()].find(([, b]) => b === body)?.[0];
-        const worldPos = matterToWorld(body.position.x, body.position.y);
+        
+        let pos = { x: body.position.x, y: body.position.y };
+        let angle = body.angle;
+
+        // Apply visual interpolation
+        if (timeStateRef.current?.isPlaying && objId) {
+          const prev = prevStates.get(objId);
+          const curr = currentStates.get(objId);
+          if (prev && curr) {
+            pos.x = prev.x + (curr.x - prev.x) * alpha;
+            pos.y = prev.y + (curr.y - prev.y) * alpha;
+            angle = prev.angle + (curr.angle - prev.angle) * alpha;
+          }
+        }
+
+        const worldPos = matterToWorld(pos.x, pos.y);
         const radiusM = (body.circleRadius ?? (body.plugin?.size / 2)) / PIXELS_PER_METER;
 
+        ctx.save();
         ctx.beginPath();
         if (body.label === 'circle') {
           const c = toScreen(worldPos.x, worldPos.y);
           ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED, 0, 2 * Math.PI);
         } else {
-          const verts = body.vertices.map(v => matterToWorld(v.x, v.y));
-          const first = toScreen(verts[0].x, verts[0].y);
-          ctx.moveTo(first.x, first.y);
-          for (let i = 1; i < verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); }
+          // For non-circles, we'd ideally interpolate vertices too, but center + rotate is usually enough
+          // However, matter-js vertices are already updated. To be smooth, we translate/rotate manually.
+          const c = toScreen(worldPos.x, worldPos.y);
+          ctx.translate(c.x, c.y);
+          ctx.rotate(angle);
+          const sizePx = (body.plugin?.size || 1) * PPM_ZOOMED;
+          if (body.label === 'polygon-3') {
+             const r = radiusM * PPM_ZOOMED;
+             ctx.moveTo(r * Math.cos(-Math.PI/2), r * Math.sin(-Math.PI/2));
+             ctx.lineTo(r * Math.cos(Math.PI/6), r * Math.sin(Math.PI/6));
+             ctx.lineTo(r * Math.cos(5*Math.PI/6), r * Math.sin(5*Math.PI/6));
+          } else {
+             ctx.rect(-sizePx/2, -sizePx/2, sizePx, sizePx);
+          }
         }
         ctx.closePath();
         ctx.fillStyle = (body.render?.fillStyle || '#999999') + 'CC';
@@ -399,12 +444,44 @@ const MatterCanvas = forwardRef(({
         ctx.strokeStyle = body.render?.fillStyle;
         ctx.lineWidth = 2;
         ctx.stroke();
+        ctx.restore();
+
+        // ── Canvas Object Name ────────────────────────────────────────────────
+        if (loopSimState?.showObjectNames && objId) {
+          const obj = loopSimState.objects?.find(o => o.id === objId);
+          if (obj) {
+            const c = toScreen(worldPos.x, worldPos.y);
+            const radiusPx = radiusM * PPM_ZOOMED;
+            const labelY = c.y - radiusPx - 15;
+
+            ctx.font = "bold 11px 'Chakra Petch', sans-serif";
+            const text = obj.name;
+            const metrics = ctx.measureText(text);
+            const padding = 6;
+            const rectW = metrics.width + padding * 2;
+            const rectH = 18;
+
+            // Draw Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.beginPath(); ctx.roundRect(c.x - rectW / 2, labelY - rectH / 2, rectW, rectH, 4); ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 1; ctx.stroke();
+
+            // Draw Text
+            ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(text, c.x, labelY);
+          }
+        }
 
         // Follow Ring
         if (loopPropsRef.current.followedObjectId === objId) {
           ctx.beginPath();
           if (body.label === 'circle') { const c = toScreen(worldPos.x, worldPos.y); ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED + 4, 0, 2 * Math.PI); }
-          else { const verts = body.vertices.map(v => matterToWorld(v.x, v.y)); const f = toScreen(verts[0].x, verts[0].y); ctx.moveTo(f.x, f.y); for (let i = 1; i < verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); } ctx.closePath(); }
+          else { 
+            const c = toScreen(worldPos.x, worldPos.y);
+            ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(angle);
+            const sizePx = (body.plugin?.size || 1) * PPM_ZOOMED + 8;
+            ctx.rect(-sizePx/2, -sizePx/2, sizePx, sizePx); ctx.restore();
+          }
           ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
         }
 
@@ -413,20 +490,13 @@ const MatterCanvas = forwardRef(({
         if (activeTool === 'cursor' && isSelected) {
           ctx.beginPath();
           if (body.label === 'circle') { const c = toScreen(worldPos.x, worldPos.y); ctx.arc(c.x, c.y, radiusM * PPM_ZOOMED + 4, 0, 2 * Math.PI); }
-          else { const verts = body.vertices.map(v => matterToWorld(v.x, v.y)); const f = toScreen(verts[0].x, verts[0].y); ctx.moveTo(f.x, f.y); for (let i = 1; i < verts.length; i++) { const p = toScreen(verts[i].x, verts[i].y); ctx.lineTo(p.x, p.y); } ctx.closePath(); }
-          ctx.strokeStyle = '#4ADE80'; ctx.lineWidth = 3; ctx.stroke();
-          
-          if (body.label !== 'circle' && loopSelectedId === objId) {
-            const rM = (body.plugin?.size || 1) / 2;
-            const hd = rM + 0.5;
-            const hWorld = { x: worldPos.x + hd * Math.cos(body.angle - Math.PI / 2), y: worldPos.y - hd * Math.sin(body.angle - Math.PI / 2) };
-            const hScreen = toScreen(hWorld.x, hWorld.y);
-            const cScreen = toScreen(worldPos.x, worldPos.y);
-            ctx.beginPath(); ctx.moveTo(cScreen.x, cScreen.y); ctx.lineTo(hScreen.x, hScreen.y);
-            ctx.strokeStyle = '#FFB65A'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
-            ctx.beginPath(); ctx.arc(hScreen.x, hScreen.y, 8, 0, 2 * Math.PI);
-            ctx.fillStyle = '#FFB65A'; ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+          else { 
+            const c = toScreen(worldPos.x, worldPos.y);
+            ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(angle);
+            const sizePx = (body.plugin?.size || 1) * PPM_ZOOMED + 8;
+            ctx.rect(-sizePx/2, -sizePx/2, sizePx, sizePx); ctx.restore();
           }
+          ctx.strokeStyle = '#4ADE80'; ctx.lineWidth = 3; ctx.stroke();
         }
       });
 

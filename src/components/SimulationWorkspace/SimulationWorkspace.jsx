@@ -47,7 +47,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
   const { 
     isPlaying, setIsPlaying, timeScale, setTimeScale, 
-    displayTime, timeStateRef, handleTogglePlay: _handleTogglePlay, handleRestart, handleSeek
+    displayTime, timeStateRef, handleTogglePlay: _handleTogglePlay, handleRestart, handleSeek, handleSpacebar
   } = useTimeManagement(simState, setSimState, onSaveControlState, matterCanvasRef, controlPanelRef);
 
   const handleTogglePlay = useCallback(() => {
@@ -101,10 +101,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
       if (e.code === 'Space') { 
         e.preventDefault(); 
         e.stopImmediatePropagation();
-        if (!isPlaying && displayTime > 0) {
-          handleRestartRef.current?.();
-        }
-        handleTogglePlay(); 
+        handleSpacebar();
       }
       if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleRestartRef.current?.(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {

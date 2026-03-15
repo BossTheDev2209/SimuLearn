@@ -1,4 +1,5 @@
 import Matter from 'matter-js';
+import { DEFAULT_SETTINGS } from '../../../constants/defaultSettings';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COORDINATE SYSTEM
@@ -190,8 +191,15 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, timeState, setIsPlay
 
   // Nothing spawned → stop immediately
   if (!hasActiveObject) {
-    timeState.isPlaying = false;
-    setIsPlaying(false);
+    const spawnedCount = state?.objects?.filter(o => o.isSpawned).length || 0;
+    // Only stop if we really have no objects OR we have objects but they've all settled/gone
+    // We check bodyMap.size > 0 to see if we've actually synced bodies yet
+    if (spawnedCount === 0 || (bodyMap && bodyMap.size > 0)) {
+      timeState.isPlaying = false;
+      setIsPlaying(false);
+    }
+    // Else: we have objects but bodyMap is empty? We are probably mid-sync (e.g. after restart). 
+    // Just skip this tick but stay playing.
     return;
   }
 
@@ -200,6 +208,32 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, timeState, setIsPlay
     timeState.isPlaying = false;
     setIsPlaying(false);
     return;
+  }
+
+  // ── Damping Logic (Air, Ground, Energy Conservation) ───────────────────────
+  const AIR_DAMP_VAL = state?.airResistance ? DEFAULT_SETTINGS.AIR_DAMPING : 0;
+  const SYS_ENERGY_LOSS = state?.energyConservation ? DEFAULT_SETTINGS.SYSTEM_ENERGY_LOSS : 0;
+  const GROUND_FRIC_VAL = (state?.groundFriction || 0) * DEFAULT_SETTINGS.GROUND_DAMPING;
+
+  for (const obj of state.objects) {
+    if (!obj.isSpawned) continue;
+    const body = bodyMap.get(obj.id);
+    if (!body) continue;
+
+    const radiusPx = body.circleRadius ?? (body.plugin?.size / 2) * PIXELS_PER_METER ?? 50;
+    const restingY = -radiusPx;
+    // We check if it's near the ground surface (matter_y = 0)
+    const isNearGround = Math.abs(body.position.y - restingY) < 10;
+
+    const currentGroundDamp = isNearGround ? GROUND_FRIC_VAL : 0;
+    const totalDamping = AIR_DAMP_VAL + currentGroundDamp + SYS_ENERGY_LOSS;
+
+    if (totalDamping > 0) {
+      Matter.Body.setVelocity(body, {
+        x: body.velocity.x * (1 - totalDamping),
+        y: body.velocity.y * (1 - totalDamping),
+      });
+    }
   }
 
   Matter.Engine.update(engine, dtMs);

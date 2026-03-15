@@ -21,6 +21,8 @@ export function useControlPanelState(initialState, simulationType, onUpdate, onB
   const [showResultantVector, setShowResultantVector] = useState(initialState?.showResultantVector ?? false);
   const [showOffScreenIndicators, setShowOffScreenIndicators] = useState(initialState?.showOffScreenIndicators ?? true);
   const [groundFriction, setGroundFriction] = useState(initialState?.groundFriction ?? 0);
+  const [energyConservation, setEnergyConservation] = useState(initialState?.energyConservation ?? false);
+  const [showObjectNames, setShowObjectNames] = useState(initialState?.showObjectNames ?? true);
 
   useEffect(() => { objectCounterRef.current = objectCounter; }, [objectCounter]);
 
@@ -29,14 +31,15 @@ export function useControlPanelState(initialState, simulationType, onUpdate, onB
     if (onUpdate) {
       const stateStr = JSON.stringify({ 
         objects, gravity, airResistance, showCoordinates, showTrajectory, 
-        gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction 
+        gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction,
+        energyConservation, showObjectNames 
       });
       if (lastUpdateRef.current !== stateStr) {
         lastUpdateRef.current = stateStr;
         onUpdate(JSON.parse(stateStr));
       }
     }
-  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction, onUpdate]);
+  }, [objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction, energyConservation, showObjectNames, onUpdate]);
 
   const updateObjectValue = useCallback((objId, key, value) => setObjects((prev) => prev.map((o) => (o.id === objId ? { ...o, values: { ...o.values, [key]: value } } : o))), []);
   const removeObjectValue = useCallback((objId, key, index) => setObjects((prev) => prev.map((o) => {
@@ -81,13 +84,15 @@ export function useControlPanelState(initialState, simulationType, onUpdate, onB
       if (newState.airResistance !== undefined) setAirResistance(newState.airResistance);
       if (newState.groundFriction !== undefined) setGroundFriction(newState.groundFriction);
       if (newState.showOffScreenIndicators !== undefined) setShowOffScreenIndicators(newState.showOffScreenIndicators);
+      if (newState.energyConservation !== undefined) setEnergyConservation(newState.energyConservation);
+      if (newState.showObjectNames !== undefined) setShowObjectNames(newState.showObjectNames);
       // ... sync other settings as needed
     }
   };
 
   return {
-    state: { objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction, activePickerId, presetProps },
-    setters: { setGravity, setAirResistance, setShowCoordinates, setShowTrajectory, setGridSnapping, setShowCursorCoords, setShowResultantVector, setShowOffScreenIndicators, setGroundFriction, setActivePickerId },
+    state: { objects, gravity, airResistance, showCoordinates, showTrajectory, gridSnapping, showCursorCoords, showResultantVector, showOffScreenIndicators, groundFriction, energyConservation, showObjectNames, activePickerId, presetProps },
+    setters: { setGravity, setAirResistance, setShowCoordinates, setShowTrajectory, setGridSnapping, setShowCursorCoords, setShowResultantVector, setShowOffScreenIndicators, setGroundFriction, setEnergyConservation, setShowObjectNames, setActivePickerId },
     actions: { updateObjectValue, removeObjectValue, removeObject, updateObjectColor, updateObjectShape, updateObjectSize, startRename, finishRename },
     refs: { anchorRefs },
     imperativeMethods

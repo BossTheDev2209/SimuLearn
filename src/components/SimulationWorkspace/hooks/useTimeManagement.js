@@ -55,8 +55,12 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
         controlPanelRef.current.resetState(restored);
       }
     }
-    if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
-  }, [setSimState, onSaveControlState, matterCanvasRef]);
+    
+    // ✅ Defer engine reset by one frame so loopPropsRef gets the new simState first
+    requestAnimationFrame(() => {
+       if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
+    });
+  }, [setSimState, onSaveControlState, matterCanvasRef, controlPanelRef]);
 
   const handleSeek = useCallback((targetTime) => {
     timeStateRef.current.time = targetTime;
@@ -64,8 +68,26 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
     setDisplayTime(targetTime);
   }, []);
 
+  const handleSpacebar = useCallback(() => {
+    if (timeStateRef.current.isPlaying) {
+      timeStateRef.current.isPlaying = false;
+      setIsPlaying(false);
+    } else {
+      if (timeStateRef.current.time > 0) {
+        handleRestart();
+        // Immediately start playing
+        timeStateRef.current.isPlaying = true;
+        setIsPlaying(true);
+      } else {
+        if (!hasStartedOnceRef.current) setHasStartedOnce(true);
+        timeStateRef.current.isPlaying = true;
+        setIsPlaying(true);
+      }
+    }
+  }, [handleRestart]);
+
   return {
     isPlaying, setIsPlaying, hasStartedOnce, setHasStartedOnce, timeScale, setTimeScale,
-    displayTime, timeStateRef, handleTogglePlay, handleRestart, handleSeek
+    displayTime, timeStateRef, handleTogglePlay, handleRestart, handleSeek, handleSpacebar
   };
 }
