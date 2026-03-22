@@ -68,9 +68,10 @@ export function useControlPanelState(initialState, simulationType, onUpdate, onB
           .filter(n => n > 0);
         const nextNum = existingNums.length === 0 ? 1 : Math.max(...existingNums) + 1;
         const counter = prev.length;
+        const finalName = (objData.name && objData.name !== "undefined") ? objData.name : `วัตถุ ${nextNum}`;
         const newObj = {
           id: objData.id || ('obj_' + Date.now()),
-          name: objData.name || `วัตถุ ${nextNum}`,
+          name: finalName,
           color: objData.color || PRESET_COLORS[counter % PRESET_COLORS.length],
           shape: objData.shape || 'circle', size: objData.size || 1, isEditing: false,
           position: objData.position, isSpawned: true, values: objData.values || {},

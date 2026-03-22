@@ -383,4 +383,37 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     expect(worldPos.x).toBeLessThan(5.05);
   });
 
+  // ── Test 12 ─────────────────────────────────────────────────────────────
+  test("12. bounce e=0.5 from 10m — timer freezes at correct total time", () => {
+    const engine = makeEngine(9.8);
+    const radiusPx = 0.5 * PPM;
+    const ball = Matter.Bodies.circle(0, -radiusPx, radiusPx, {
+      friction: 0, frictionAir: 0, frictionStatic: 0,
+      restitution: 0.5,
+    });
+    // Place center at 10.5m world → matter y = -1050px
+    const { x, y } = worldToMatter(0, 10.5);
+    Matter.Body.setPosition(ball, { x, y });
+    Matter.Composite.add(engine.world, ball);
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(9.8, [{
+      id: "obj_1",
+      isSpawned: true,
+      size: 1,
+      position: { x: 0, y: 10.5 },
+      values: { restitution: 0.5 },
+    }]);
+
+    const result = runUntilStop(engine, bodyMap, simState);
+
+    // t_total = sqrt(2h/g) * (1+e)/(1-e)
+    const h = 10; // bottom edge to ground
+    const expected = Math.sqrt(2 * h / 9.8) * (1 + 0.5) / (1 - 0.5);
+    console.log("Test 12 — bounce time:", result.time.toFixed(4), "s  (expected ~", expected.toFixed(4), "s)");
+
+    expect(result.time).toBeGreaterThan(expected * 0.92);
+    expect(result.time).toBeLessThan(expected * 1.08);
+  });
+
 });

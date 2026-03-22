@@ -144,6 +144,25 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleTogglePlay, undoRef, redoRef, displayTime, selectedObjectId, setSelectedObjectId, selectedObjectIds, setSelectedObjectIds, showToast, simState, pushToHistory]);
 
+  // Global cleanup: if tracked or selected objects are removed from state, clear them to prevent ghost locks
+  useEffect(() => {
+    if (!simState?.objects) return;
+    const currentIds = new Set(simState.objects.map(o => o.id));
+    
+    if (followedObjectId && !currentIds.has(followedObjectId)) {
+      setFollowedObjectId(null);
+    }
+    if (selectedObjectId && !currentIds.has(selectedObjectId)) {
+      setSelectedObjectId(null);
+    }
+    if (selectedObjectIds.length > 0) {
+      const validIds = selectedObjectIds.filter(id => currentIds.has(id));
+      if (validIds.length !== selectedObjectIds.length) {
+        setSelectedObjectIds(validIds);
+      }
+    }
+  }, [simState?.objects, followedObjectId, selectedObjectId, selectedObjectIds, setFollowedObjectId, setSelectedObjectId, setSelectedObjectIds]);
+
   // UI rendering
   return (
     <div className="flex-1 flex flex-col h-full w-full relative">
