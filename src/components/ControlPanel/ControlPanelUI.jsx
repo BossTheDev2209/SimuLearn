@@ -154,7 +154,7 @@ export const GlobalSettings = memo(({ isLocked, state, setters }) => (
       <ToggleRow label="แสดงเส้นพิกัด" checked={state.showCoordinates} onChange={setters.setShowCoordinates} />
       <ToggleRow label="แสดงเส้นวิถี" checked={state.showTrajectory} onChange={setters.setShowTrajectory} />
       <ToggleRow label="สแนปเมาส์เข้ากับตาราง" checked={state.gridSnapping} onChange={setters.setGridSnapping} />
-      <ToggleRow label="กฎการอนุรักษ์พลังงาน" checked={state.energyConservation} onChange={setters.setEnergyConservation} disabled={isLocked} />
+      <ToggleRow label="การสูญเสียพลังงาน" checked={state.energyConservation} onChange={setters.setEnergyConservation} disabled={isLocked} />
       <ToggleRow label="แสดงชื่อวัตถุ" checked={state.showObjectNames} onChange={setters.setShowObjectNames} />
       <ToggleRow label="แสดงพิกัดตามเมาส์" checked={state.showCursorCoords} onChange={setters.setShowCursorCoords} />
       <ToggleRow label="แสดงผลรวมเวกเตอร์" checked={state.showResultantVector} onChange={setters.setShowResultantVector} />

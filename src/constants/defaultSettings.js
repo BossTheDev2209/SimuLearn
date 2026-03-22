@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS = {
   // Physics Constants (Damping)
   AIR_DAMPING: 0.001,      // Reduced from 0.015 as requested
   GROUND_DAMPING: 0.05,    // Reduced from 0.08 as requested
-  SYSTEM_ENERGY_LOSS: 0.02, // Base damping for Energy Conservation toggle
+  SYSTEM_ENERGY_LOSS: 0.02, // Base damping for Energy Loss toggle
 };
 
 export const DEFAULT_OBJECT_PROPS = {

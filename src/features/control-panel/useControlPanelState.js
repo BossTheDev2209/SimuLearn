@@ -61,12 +61,23 @@ export function useControlPanelState(initialState, simulationType, onUpdate, onB
 
   const imperativeMethods = {
     addObject: (objData) => {
-      const counter = objectCounterRef.current;
-      const newObj = {
-        id: objData.id || ('obj_' + Date.now()), name: `วัตถุ ${counter + 1}`, color: objData.color || PRESET_COLORS[counter % PRESET_COLORS.length],
-        shape: objData.shape || 'circle', size: objData.size || 1, isEditing: false, position: objData.position, isSpawned: true, values: objData.values || {},
-      };
-      setObjects((prev) => [...prev, newObj]); setObjectCounter((prev) => prev + 1);
+      // Derive next number from existing object names instead of monotonic counter
+      setObjects((prev) => {
+        const existingNums = prev
+          .map(o => { const m = o.name?.match(/^วัตถุ\s*(\d+)$/); return m ? parseInt(m[1]) : 0; })
+          .filter(n => n > 0);
+        const nextNum = existingNums.length === 0 ? 1 : Math.max(...existingNums) + 1;
+        const counter = prev.length;
+        const newObj = {
+          id: objData.id || ('obj_' + Date.now()),
+          name: objData.name || `วัตถุ ${nextNum}`,
+          color: objData.color || PRESET_COLORS[counter % PRESET_COLORS.length],
+          shape: objData.shape || 'circle', size: objData.size || 1, isEditing: false,
+          position: objData.position, isSpawned: true, values: objData.values || {},
+        };
+        return [...prev, newObj];
+      });
+      setObjectCounter((prev) => prev + 1);
     },
     removeObject: (objId) => setObjects((prev) => prev.filter((o) => o.id !== objId)),
     removeObjects: (objIds) => {

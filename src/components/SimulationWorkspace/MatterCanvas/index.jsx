@@ -322,7 +322,10 @@ const MatterCanvas = forwardRef(({
           }
 
           timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
-          timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
+          // Freeze UI timer if physics engine returns 'settling' so we don't count the hold period
+          if (status !== 'settling') {
+             timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
+          }
           accumulator -= FIXED_DELTA_MS;
 
           // Track Trajectories
@@ -647,7 +650,7 @@ const MatterCanvas = forwardRef(({
     const engine = engineRef.current;
     if (!engine || !simState) return;
 
-    engine.gravity.scale = 1;
+    engine.gravity.scale = 0.001;
     engine.gravity.x = 0;
     engine.gravity.y = computeGravityY(simState.gravity || 9.8);
 
@@ -719,7 +722,8 @@ const MatterCanvas = forwardRef(({
         let vxSum = 0, vySum = 0;
         for (const v of vels) {
           const angleRad = (v.angle * Math.PI) / 180;
-          const scale = PIXELS_PER_METER / 60;
+          const FIXED_DELTA_MS = 1000 / 60; // Should match engine fixed delta
+          const scale = PIXELS_PER_METER * (FIXED_DELTA_MS / 1000);
           vxSum += v.magnitude * scale * Math.cos(angleRad);
           vySum += v.magnitude * scale * Math.sin(angleRad);
         }

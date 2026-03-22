@@ -82,16 +82,16 @@ export const useZoomLogic = (
     
     if (!isDragging) return;
 
-    // 🌟 INVERSE PANNING: newOffset = dragStartOffset - (mouseDelta / zoom)
-    // This allows world coordinates to track 1:1 with mouse movement.
+    // Screen-space panning: offset is in screen pixels, so add raw deltas directly.
+    // Zoom is already factored in at render time (PPM_ZOOMED = PPM * zoom).
     const dx = e.clientX - dragStartScreen.current.x;
     const dy = e.clientY - dragStartScreen.current.y;
 
     setCamera(prev => ({
       ...prev,
       offset: {
-        x: dragStartOffset.current.x - (dx / prev.zoom),
-        y: dragStartOffset.current.y - (dy / prev.zoom)
+        x: dragStartOffset.current.x + dx,
+        y: dragStartOffset.current.y + dy
       }
     }));
   }, [getSimCoords, onGridPointerMove, unitStep, isDragging]);

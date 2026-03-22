@@ -46,21 +46,21 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
     setIsPlaying(false);
     setDisplayTime(0);
 
-    if (snapshotRef.current) {
-      const restored = snapshotRef.current.simState;
+    // Restore from snapshot if available, otherwise use current simState as fallback
+    const restored = snapshotRef.current?.simState ?? (simState ? JSON.parse(JSON.stringify(simState)) : null);
+    if (restored) {
       setSimState(restored);
       if (onSaveControlState) onSaveControlState(restored);
-      // 🌟 Sync ControlPanel
       if (controlPanelRef?.current?.resetState) {
         controlPanelRef.current.resetState(restored);
       }
     }
     
-    // ✅ Defer engine reset by one frame so loopPropsRef gets the new simState first
+    // Defer engine reset by one frame so loopPropsRef gets the new simState first
     requestAnimationFrame(() => {
        if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
     });
-  }, [setSimState, onSaveControlState, matterCanvasRef, controlPanelRef]);
+  }, [simState, setSimState, onSaveControlState, matterCanvasRef, controlPanelRef]);
 
   const handleSeek = useCallback((targetTime) => {
     timeStateRef.current.time = targetTime;
