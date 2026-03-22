@@ -100,12 +100,19 @@ export const createGround = () => {
   );
 };
 
-const SETTLE_SPEED_PX = 0.5;  // px/tick — large enough to not trigger mid-fall
-const SETTLE_DIST_PX  = 2;    // px — tolerance for resting position
+const SETTLE_SPEED_PX = 1.0;  // px/tick — increased for heavy object jitter
+const SETTLE_DIST_PX  = 3;    // px — tolerance for resting position
 const SETTLE_HOLD_S   = 0.3;  // seconds of sustained stillness before auto-stop
 
-// Per-body accumulated settled time (seconds of continuous rest)
-const settledTimeMap = new Map();
+// Global accumulated settled time (seconds of continuous all-still rest)
+let globalSettledTime = 0;
+
+/**
+ * Resets the global settled time map across runs
+ */
+export const resetSettledTimeMap = () => {
+  globalSettledTime = 0;
+};
 
 /**
  * Performs a single fixed-timestep physics update.
@@ -146,48 +153,36 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, timeState, setIsPlay
           ? (body.plugin.size / 2) * PIXELS_PER_METER
           : 0.5 * PIXELS_PER_METER);
 
-      // Resting position in Matter Y-down:
-      // surface is at y=0. Object is ABOVE surface (negative Y).
-      // Center rests at y = -radiusPx
       const restingY = -radiusPx;
       const distFromRest = Math.abs(body.position.y - restingY);
       const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
 
-      const isBodySettled = distFromRest <= SETTLE_DIST_PX && speed < SETTLE_SPEED_PX;
+      // Looser thresholds for jitter-free settlement without mid-hold snapping
+      const isBodyInSettleZone = distFromRest <= 4 && speed < 1.5;
 
-      if (isBodySettled) {
-        Matter.Body.setVelocity(body, { x: 0, y: 0 });
-        Matter.Body.setPosition(body, { x: body.position.x, y: restingY });
-        // Accumulate settled time for this body
-        settledTimeMap.set(obj.id, (settledTimeMap.get(obj.id) || 0) + dtS);
-      } else {
-        // Anti-noclip: if object has gone BELOW restingY (further down in Matter Y-down),
-        // pull it back up immediately
-        if (body.position.y > restingY + SETTLE_DIST_PX) {
+      if (!isBodyInSettleZone) {
+        // Anti-noclip: if object has gone BELOW restingY, pull it back up
+        if (body.position.y > restingY + 8) {
            Matter.Body.setPosition(body, { x: body.position.x, y: restingY });
            if (body.velocity.y > 0) Matter.Body.setVelocity(body, { x: body.velocity.x, y: 0 });
         }
-        // Reset settled time — body is still moving
-        settledTimeMap.set(obj.id, 0);
         allSettled = false;
       }
 
-      // Check if this body has been settled long enough
-      if (isBodySettled && (settledTimeMap.get(obj.id) || 0) < SETTLE_HOLD_S) {
-        allSettled = false; // Not yet confirmed settled
+      // Any significant linear or angular motion resets the global hold
+      const isActuallyMoving = !isBodyInSettleZone || Math.abs(body.angularVelocity) > 0.1;
+      if (isActuallyMoving) {
+        allSettled = false;
       }
 
       // ── Apply forces ──────────────────────────────────────────────────────
       //
       // F_world in Newtons. Matter applyForce unit: mass * px / tick²
-      //
-      // F_matter = F_N * PPM * (dtS²)
-      // where dtS = dtMs / 1000
-      //
-      // forceScale: เพื่อแปลง N (world) เป็น Matter force
-      // a = F/m -> Δv = (F/m) * Δt
-      // (dtS already declared at function scope)
-      const forceScale = PIXELS_PER_METER * dtS * dtS;
+      // To get 1 N to produce 1 m/s² of acceleration per real second:
+      // a_matter (px/dtS) = F_N * (forceScale / m) * dtMs
+      // We want this to match world coordinates correctly.
+      // 0.000001 handles the mapping between Newtons, kg, and 16.66ms tick correctly.
+      const forceScale = PIXELS_PER_METER * 0.000001;
 
       const forces = [...(obj.values?.forces || [])];
       if (obj.values?.force != null) {
@@ -206,33 +201,45 @@ export const updatePhysics = (engine, dtMs, state, bodyMap, timeState, setIsPlay
   }
 
   // No active objects — early return (timer keeps counting)
-  if (!hasActiveObject) return;
-
-  // Check if objects are actively moving or just sitting waiting for hold timer
-  let isActivelyMoving = false;
-  if (!allSettled) {
-    for (const obj of state.objects) {
-      if (!obj.isSpawned) continue;
-      if (settledTimeMap.get(obj.id) === 0) {
-        isActivelyMoving = true;
-        break;
-      }
-    }
+  if (!hasActiveObject) {
+    globalSettledTime = 0;
+    return;
   }
 
-  // All objects confirmed settled for SETTLE_HOLD_S → auto-stop
+  // All bodies must satisfy sub-threshold speed/pos to increment global timer
   if (allSettled) {
+    globalSettledTime += dtS;
+  } else {
+    globalSettledTime = 0;
+  }
+
+  // console.log(`[PhysicsEngine] allSettled: ${allSettled}, hold: ${globalSettledTime.toFixed(3)}s`);
+
+  // ALL objects confirmed settled for SETTLE_HOLD_S → snap to rest and stop
+  if (allSettled && globalSettledTime >= SETTLE_HOLD_S) {
+    for (const obj of state.objects) {
+      if (!obj.isSpawned) continue;
+      const body = bodyMap.get(obj.id);
+      if (!body) continue;
+      
+      const radiusPx = body.circleRadius ?? (body.plugin?.size / 2) * PIXELS_PER_METER ?? 0;
+      const restingY = -radiusPx;
+
+      Matter.Body.setVelocity(body, { x: 0, y: 0 });
+      Matter.Body.setAngularVelocity(body, 0);
+      Matter.Body.setPosition(body, { x: body.position.x, y: restingY });
+    }
+
     timeState.isPlaying = false;
     setIsPlaying(false);
     return 'settled';
   }
 
-  // If not actively moving but not all settled (i.e., in the hold period)
-  if (!isActivelyMoving) {
+  // If not all settled but no one is "actively moving" (e.g. in the hold period)
+  if (allSettled) {
     Matter.Engine.update(engine, dtMs);
     return 'settling';
   }
-
 
   // ── Damping Logic (Air, Ground, Energy Loss) ───────────────────────────────
   // Linear drag: F_drag ∝ -v. Applied as velocity scaling per timestep.

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { resetSettledTimeMap } from '../physics/PhysicsEngine';
 
 export function useTimeManagement(simState, setSimState, onSaveControlState, matterCanvasRef, controlPanelRef) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -31,7 +32,9 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
     const next = !timeStateRef.current.isPlaying;
     
     if (next && !timeStateRef.current.isPlaying) {
-      snapshotRef.current = { simState: JSON.parse(JSON.stringify(simState)) };
+      if (timeStateRef.current.totalPhysicsTicks === 0) {
+        snapshotRef.current = { simState: JSON.parse(JSON.stringify(simState)) };
+      }
     }
     
     timeStateRef.current.isPlaying = next;
@@ -58,6 +61,7 @@ export function useTimeManagement(simState, setSimState, onSaveControlState, mat
     
     // Defer engine reset by one frame so loopPropsRef gets the new simState first
     requestAnimationFrame(() => {
+       resetSettledTimeMap();
        if (matterCanvasRef.current) matterCanvasRef.current.resetSimulation();
     });
   }, [simState, setSimState, onSaveControlState, matterCanvasRef, controlPanelRef]);

@@ -119,8 +119,8 @@ const MatterCanvas = forwardRef(({
           }
 
           timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
-          // Freeze UI timer if physics engine returns 'settling' so we don't count the hold period
-          if (status !== 'settling') {
+          // Freeze UI timer if physics engine returns 'settling' or 'settled' so we don't count the hold period
+          if (status !== 'settling' && status !== 'settled') {
              timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
           }
           accumulator -= FIXED_DELTA_MS;
@@ -222,6 +222,9 @@ const MatterCanvas = forwardRef(({
         const currentShape = body.label;
         
         if (currentSize !== obj.size || currentShape !== obj.shape) {
+           const oldVelocity = { x: body.velocity.x, y: body.velocity.y };
+           const oldAngularVelocity = body.angularVelocity;
+           const oldAngle = body.angle;
            Matter.Composite.remove(engine.world, body);
            
            const opts = { 
@@ -229,7 +232,7 @@ const MatterCanvas = forwardRef(({
              friction: body.friction, 
              frictionAir: body.frictionAir, 
              frictionStatic: body.frictionStatic,
-             angle: body.angle
+             angle: oldAngle
            };
            const radiusPx = (obj.size || 1) * PIXELS_PER_METER / 2;
            const px = body.position.x;
@@ -241,13 +244,15 @@ const MatterCanvas = forwardRef(({
            
            body.label = obj.shape;
            body.plugin = { size: obj.size || 1 };
-           Matter.Body.setVelocity(body, body.velocity);
+           Matter.Body.setVelocity(body, oldVelocity);
+           Matter.Body.setAngularVelocity(body, oldAngularVelocity);
            Matter.Composite.add(engine.world, body);
            bodyMap.current.set(obj.id, body);
         }
       }
 
       body.render.fillStyle = obj.color;
+      Matter.Body.setMass(body, obj.values?.mass || 1.0);
 
       if (obj.values && !timeStateRef.current?.isPlaying) {
         if (obj.values.height !== undefined) {
