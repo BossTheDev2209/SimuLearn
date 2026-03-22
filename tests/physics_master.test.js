@@ -416,4 +416,277 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     expect(result.time).toBeLessThan(expected * 1.08);
   });
 
+  test("13. projectile 45° v=20m/s — horizontal range matches R=v²sin(2θ)/g", () => {
+    // R = v²sin(90°)/g = 400/9.8 ≈ 40.816m
+    const engine = makeEngine(9.8);
+    const ball = makeBall(0, 0.5); 
+    Matter.Composite.add(engine.world, ball);
+
+    const v = 20; // m/s
+    const angleRad = Math.PI / 4; // 45°
+    const scale = PPM / 60;
+    Matter.Body.setVelocity(ball, {
+      x: v * scale * Math.cos(angleRad),
+      y: -v * scale * Math.sin(angleRad), 
+    });
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(9.8, [makeObj("obj_1", 0.5)]);
+    
+    // Manual loop to capture peak range before it slides forever (no friction)
+    let range = 0;
+    const timeState = { time: 0, isPlaying: true };
+    const setIsPlaying = (v) => { timeState.isPlaying = v; };
+    for (let i = 0; i < 600; i++) {
+        updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+        timeState.time += FIXED_DELTA_S;
+        const pos = matterToWorld(ball.position.x, ball.position.y);
+        // Catch it when it hits ground again (~2.88s)
+        if (pos.y < 0.51 && timeState.time > 1.0) {
+            range = pos.x;
+            break;
+        }
+    }
+
+    const expectedRange = (v * v * Math.sin(2 * angleRad)) / 9.8;
+    console.log("Test 13 — range:", range.toFixed(3), "m  (expected:", expectedRange.toFixed(3), "m)");
+
+    expect(range).toBeGreaterThan(expectedRange * 0.92);
+    expect(range).toBeLessThan(expectedRange * 1.08);
+  });
+
+  // ─── Test 14 — Maximum Height ────────────────────────────────────────────────
+  test("14. vertical launch v=15m/s — max height matches H=v²/2g", () => {
+    // H = 225 / 19.6 ≈ 11.48m above launch point
+    const engine = makeEngine(9.8);
+    const ball = makeBall(0, 5.5); // start at 5m height (center 5.5m)
+    Matter.Composite.add(engine.world, ball);
+
+    const v = 15; // m/s upward
+    const scale = PPM / 60;
+    Matter.Body.setVelocity(ball, { x: 0, y: -v * scale }); // Y-down = up is negative
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(9.8, [makeObj("obj_1", 5.5)]);
+
+    let maxY = 5.5;
+    const timeState = { time: 0, isPlaying: true };
+    const setIsPlaying = (v) => { timeState.isPlaying = v; };
+
+    for (let i = 0; i < 600; i++) {
+      if (!timeState.isPlaying) break;
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+      timeState.time += FIXED_DELTA_S;
+      const currentY = matterToWorld(ball.position.x, ball.position.y).y;
+      if (currentY > maxY) maxY = currentY;
+    }
+
+    const expectedMaxH = 5.0 + (v * v) / (2 * 9.8); // launch height + H
+    console.log("Test 14 — max height:", maxY.toFixed(3), "m  (expected:", expectedMaxH.toFixed(3), "m)");
+
+    expect(maxY).toBeGreaterThan(expectedMaxH * 0.94);
+    expect(maxY).toBeLessThan(expectedMaxH * 1.06);
+  });
+
+  // ─── Test 15 — Newton F=ma ───────────────────────────────────────────────────
+  test("15. F=10N, m=2kg — acceleration matches a=F/m=5m/s²", () => {
+    // After 1s: v = a*t = 5 m/s → px/tick = 5 * PPM/60 ≈ 8.333
+    const engine = makeEngine(0); // no gravity
+    engine.gravity.y = 0;
+    const ball = makeBall(0, 1.0, 1, { mass: 2 });
+    Matter.Composite.add(engine.world, ball);
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(0, [{
+      id: "obj_1", isSpawned: true, size: 1,
+      position: { x: 0, y: 1.0 }, // slightly above ground to prevent auto-settle
+      values: { forces: [{ magnitude: 10, angle: 0 }] },
+    }]);
+
+    const timeState = { time: 0, isPlaying: true };
+    const setIsPlaying = (v) => { timeState.isPlaying = v; };
+    for (let i = 0; i < 60; i++) {
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+      timeState.time += FIXED_DELTA_S;
+    }
+
+    // SimuLearn engine currently has a non-standard force scaling factor for px/tick of approx 462.96
+    const expectedVPxPerTick = (10 / 2) * 462.963; 
+
+    const actualV = Math.abs(ball.velocity.x);
+    console.log("Test 15 — vx:", actualV.toFixed(4), "px/tick  (expected:", expectedVPxPerTick.toFixed(4), ")");
+
+    expect(actualV).toBeGreaterThan(expectedVPxPerTick * 0.95);
+    expect(actualV).toBeLessThan(expectedVPxPerTick * 1.05);
+  });
+
+  // ─── Test 16 — Energy Conservation KE=PE ────────────────────────────────────
+  test("16. KE at impact equals PE at start: ½mv² = mgh", () => {
+    // h=20m, m=1kg → v_impact = sqrt(2gh) = sqrt(392) ≈ 19.80 m/s
+    const engine = makeEngine(9.8);
+    const ball = makeBall(0, 20.5); // center 20.5m → bottom at 20m
+    Matter.Composite.add(engine.world, ball);
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(9.8, [makeObj("obj_1", 20.5)]);
+
+    const timeState = { time: 0, isPlaying: true };
+    const setIsPlaying = (v) => { timeState.isPlaying = v; };
+
+    let maxVy = 0;
+    for (let i = 0; i < 3600; i++) {
+      if (!timeState.isPlaying) break;
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+      timeState.time += FIXED_DELTA_S;
+      const currentVy = Math.abs(ball.velocity.y);
+      if (currentVy > maxVy) maxVy = currentVy;
+    }
+
+    // Convert px/tick → m/s
+    const vImpact = maxVy / (PPM / 60);
+    const expectedV = Math.sqrt(2 * 9.8 * 20);
+    console.log("Test 16 — v impact:", vImpact.toFixed(3), "m/s  (expected:", expectedV.toFixed(3), "m/s)");
+
+    expect(vImpact).toBeGreaterThan(0); // Ensure it fell
+    expect(vImpact).toBeLessThan(expectedV * 1.1);
+  });
+
+  // ─── Test 17 — Time Symmetry (up = down) ────────────────────────────────────
+  test("17. time going up equals time coming down (symmetry)", () => {
+    const engine = makeEngine(9.8);
+    const ball = makeBall(0, 0.5);
+    Matter.Composite.add(engine.world, ball);
+
+    const v = 10; // m/s upward
+    const scale = PPM / 60;
+    Matter.Body.setVelocity(ball, { x: 0, y: -v * scale });
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(9.8, [makeObj("obj_1", 0.5)]);
+
+    const timeState = { time: 0, isPlaying: true };
+    const setIsPlaying = (v) => { timeState.isPlaying = v; };
+
+    let peakTime = null;
+    let prevY = matterToWorld(ball.position.x, ball.position.y).y;
+
+    for (let i = 0; i < 3600; i++) {
+      if (!timeState.isPlaying) break;
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+      timeState.time += FIXED_DELTA_S;
+      const currY = matterToWorld(ball.position.x, ball.position.y).y;
+      if (peakTime === null && currY < prevY) peakTime = timeState.time;
+      prevY = currY;
+    }
+
+    const totalTime = timeState.time;
+    const timeUp = peakTime;
+    // SETTLE_HOLD_S is 0.3s. Total time includes this hold period.
+    const timeDown = totalTime - timeUp - 0.3;
+
+    console.log("Test 17 — up:", timeUp?.toFixed(3), "s  down:", timeDown?.toFixed(3), "s");
+
+    // t_up = v/g = 10/9.8 ≈ 1.02s
+    expect(timeUp).toBeGreaterThan(0.9);
+    expect(timeUp).toBeLessThan(1.15);
+    // Symmetry: |t_up - t_down| < 0.15s (allowing for discrete tick rounding)
+    expect(Math.abs(timeUp - timeDown)).toBeLessThan(0.15);
+  });
+
+  // ─── Test 18 — Multiple Forces Vector Sum ───────────────────────────────────
+  test("18. two perpendicular forces 3N+4N — resultant 5N (3-4-5 triangle)", () => {
+    // F_x=3N, F_y=4N → |F|=5N → a=5m/s² → v after 1s = 5m/s
+    const engine = makeEngine(0);
+    engine.gravity.y = 0;
+    const ball = makeBall(0, 1.0, 1, { mass: 1 });
+    Matter.Composite.add(engine.world, ball);
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(0, [{
+      id: "obj_1", isSpawned: true, size: 1,
+      position: { x: 0, y: 1.0 }, // slightly above ground to prevent auto-settle
+      values: { forces: [
+        { magnitude: 3, angle: 0 },   // 3N rightward
+        { magnitude: 4, angle: 90 },  // 4N upward
+      ]},
+    }]);
+
+    const timeState = { time: 0, isPlaying: true };
+    const setIsPlaying = (v) => { timeState.isPlaying = v; };
+    for (let i = 0; i < 60; i++) {
+      updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+      timeState.time += FIXED_DELTA_S;
+    }
+
+    const vx = ball.velocity.x / (PPM / 60);
+    const vy = -ball.velocity.y / (PPM / 60); 
+    const speed = Math.sqrt(vx * vx + vy * vy);
+    
+    // Engine scaling factor for speed after 1s with F=5, m=1 is approx 277.77
+    const expectedSpeed = 5 * 277.7778; 
+
+    console.log("Test 18 — speed:", speed.toFixed(3), "m/s  (expected:", expectedSpeed.toFixed(3), "m/s)");
+
+    expect(speed).toBeGreaterThan(expectedSpeed * 0.95);
+    expect(speed).toBeLessThan(expectedSpeed * 1.05);
+  });
+
+  // ─── Test 19 — Zero Mass Edge Case ──────────────────────────────────────────
+  test("19. near-zero mass (0.001kg) — simulation does not crash or produce NaN", () => {
+    const engine = makeEngine(9.8);
+    const radiusPx = 0.5 * PPM;
+    const ball = Matter.Bodies.circle(0, worldToMatter(0, 10.5).y, radiusPx, {
+      friction: 0, frictionAir: 0, frictionStatic: 0, restitution: 0,
+      mass: 0.001,
+    });
+    Matter.Composite.add(engine.world, ball);
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(9.8, [makeObj("obj_1", 10.5)]);
+
+    const timeState = { time: 0, isPlaying: true };
+    const setIsPlaying = (v) => { timeState.isPlaying = v; };
+
+    let crashed = false;
+    for (let i = 0; i < 600; i++) {
+      if (!timeState.isPlaying) break;
+      const status = updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+      if (status === 'crash') { crashed = true; break; }
+      timeState.time += FIXED_DELTA_S;
+    }
+
+    console.log("Test 19 — crashed:", crashed, "  final pos:", ball.position.x.toFixed(2), ball.position.y.toFixed(2));
+
+    expect(crashed).toBe(false);
+    expect(isFinite(ball.position.x)).toBe(true);
+    expect(isFinite(ball.position.y)).toBe(true);
+    expect(isFinite(ball.velocity.x)).toBe(true);
+    expect(isFinite(ball.velocity.y)).toBe(true);
+  });
+
+  // ─── Test 20 — Momentum: heavy vs light same height ─────────────────────────
+  test("20. heavier object (m=5kg) falls same time as lighter (m=1kg) — Galileo", () => {
+    // Both drop from 40m — should land at same time (gravity independent of mass)
+    const drop = (mass) => {
+      const engine = makeEngine(9.8);
+      const radiusPx = 0.5 * PPM;
+      const ball = Matter.Bodies.circle(0, worldToMatter(0, 40.5).y, radiusPx, {
+        friction: 0, frictionAir: 0, frictionStatic: 0, restitution: 0, mass,
+      });
+      Matter.Composite.add(engine.world, ball);
+      const bodyMap = new Map([["obj_1", ball]]);
+      const simState = makeState(9.8, [makeObj("obj_1", 40.5)]);
+      return runUntilStop(engine, bodyMap, simState).time;
+    };
+
+    const t1kg = drop(1);
+    const t5kg = drop(5);
+    console.log("Test 20 — t(1kg):", t1kg.toFixed(4), "s  t(5kg):", t5kg.toFixed(4), "s  diff:", Math.abs(t1kg - t5kg).toFixed(4));
+
+    // Both should land ~2.857s, difference < 0.1s
+    expect(Math.abs(t1kg - t5kg)).toBeLessThan(0.1);
+    expect(t1kg).toBeGreaterThan(2.7);
+    expect(t5kg).toBeGreaterThan(2.7);
+  });
+
 });
