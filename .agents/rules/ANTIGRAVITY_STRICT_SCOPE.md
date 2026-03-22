@@ -35,3 +35,12 @@ Found a bug outside the task? Write it under "Out-of-scope issues found" — do 
 ## S8 — Confirm before running commands
 State the command and reason. Wait for confirmation.
 Exception: `bun test tests/physics_master.test.js` is always allowed.
+
+## S9 — Keep files under 200 lines
+ 
+No file should exceed 200 lines. When adding code that would push a file over this limit:
+1. Stop and identify what can be extracted into a separate file
+2. Extract it before adding the new code
+3. Each file must have a single clear responsibility
+ 
+When creating a new file, if the planned content exceeds 200 lines, split it into multiple files from the start.

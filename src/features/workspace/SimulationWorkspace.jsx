@@ -22,6 +22,7 @@ import { useTimeManagement } from './hooks/useTimeManagement';
 import { useSimulationLogic } from './hooks/useSimulationLogic';
 import { useVectorInteraction } from './hooks/useVectorInteraction';
 import { useCameraEngine } from './hooks/useCameraEngine';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveControlState, onSavePhysicsState }, ref) => {
   const shouldHideLogo = isInteracting || activeSim !== null;
@@ -47,7 +48,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
   const { 
     isPlaying, setIsPlaying, timeScale, setTimeScale, 
-    displayTime, timeStateRef, handleTogglePlay: _handleTogglePlay, handleRestart, handleSeek, handleSpacebar
+    displayTime, timeStateRef, handleTogglePlay: _handleTogglePlay, handleRestart, handleSpacebar
   } = useTimeManagement(simState, setSimState, onSaveControlState, matterCanvasRef, controlPanelRef);
 
   const handleTogglePlay = useCallback(() => {
@@ -70,7 +71,7 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
     activeTool, simState, matterCanvasRef, pushToHistory, controlPanelRef, 
     setVectorEditor, followedObjectId, setFollowedObjectId,
     selectedObjectId, setSelectedObjectId,
-    selectedObjectIds, setSelectedObjectIds, // ✅ เพิ่ม — ทำให้ Shift+click อัปเดต multi-select ได้
+    selectedObjectIds, setSelectedObjectIds,
     bodiesRef
   });
 
@@ -90,59 +91,20 @@ const SimulationWorkspace = forwardRef(({ activeSim, isInteracting, onSaveContro
 
   useEffect(() => { if (simState && onSaveControlState) onSaveControlState(simState); }, [simState, onSaveControlState]);
 
-  const handleRestartRef = useRef(handleRestart);
-  useEffect(() => { handleRestartRef.current = handleRestart; }, [handleRestart]);
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const tag = e.target.tagName;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
-
-      if (e.code === 'Space') { 
-        e.preventDefault(); 
-        e.stopImmediatePropagation();
-        handleSpacebar();
-      }
-      if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleRestartRef.current?.(); }
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
-        e.preventDefault();
-        const restored = e.shiftKey ? redoRef.current?.() : undoRef.current?.();
-        if (restored && controlPanelRef.current?.resetState) controlPanelRef.current.resetState(restored);
-      }
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
-        e.preventDefault();
-        const restored = redoRef.current?.();
-        if (restored && controlPanelRef.current?.resetState) controlPanelRef.current.resetState(restored);
-      }
-      if (e.code === 'Delete') {
-        const hasMultiple = selectedObjectIds && selectedObjectIds.length > 0;
-        const targetId = selectedObjectId;
-        const targetIds = selectedObjectIds;
-
-        if ((targetId || hasMultiple) && controlPanelRef.current) {
-          e.preventDefault();
-          pushToHistory(simState);
-          
-          if (hasMultiple) {
-            if (controlPanelRef.current.removeObjects) {
-              controlPanelRef.current.removeObjects(targetIds);
-            } else {
-              targetIds.forEach(id => controlPanelRef.current.removeObject?.(id));
-            }
-            setSelectedObjectIds([]);
-            setSelectedObjectId(null);
-            showToast('ลบวัตถุทั้งหมดแล้ว');
-          } else if (targetId) {
-            controlPanelRef.current.removeObject?.(targetId);
-            setSelectedObjectId(null);
-            showToast('ลบวัตถุที่เลือกแล้ว');
-          }
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePlay, undoRef, redoRef, displayTime, selectedObjectId, setSelectedObjectId, selectedObjectIds, setSelectedObjectIds, showToast, simState, pushToHistory]);
+  useKeyboardShortcuts({
+    handleSpacebar,
+    handleRestart,
+    undoRef,
+    redoRef,
+    controlPanelRef,
+    selectedObjectId,
+    selectedObjectIds,
+    setSelectedObjectIds,
+    setSelectedObjectId,
+    pushToHistory,
+    simState,
+    showToast
+  });
 
   // Global cleanup: if tracked or selected objects are removed from state, clear them to prevent ghost locks
   useEffect(() => {

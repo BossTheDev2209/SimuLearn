@@ -1,7 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db, auth } from './firebase';
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import LoadingSimulation from './components/LoadingSimulation';
 import Sidebar from './components/Sidebar';
 import SimulationWorkspace from './features/workspace/SimulationWorkspace.jsx';
@@ -10,6 +7,8 @@ import SearchModal from './components/SearchModal';
 import SettingsModal from './components/SettingsModal';
 import LoginPage from './LoginPage';
 import useSimulations from './hooks/useSimulations';
+import { useAppAuth } from './hooks/useAppAuth';
+import { useAppTheme } from './hooks/useAppTheme';
 
 function App() {
   const myUserId = localStorage.getItem("currentUserId");
@@ -19,10 +18,15 @@ function App() {
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [userPreferences, setUserPreferences] = useState({ 
-    theme: localStorage.getItem('theme') || 'system', 
-    lang: 'th' 
-  });
+
+  // Custom Hooks
+  const { handleGoogleLogin, handleEmailLogin, handleEmailSignup, handleGuestLogin, handleLogout } = useAppAuth();
+  const { userPreferences, handleSaveSettings: savePreferences } = useAppTheme(myUserId);
+
+  const handleSaveSettings = (newTheme, newLang) => {
+    savePreferences(newTheme, newLang);
+    setIsSettingsOpen(false);
+  };
 
   // Simulation Hook
   const {
@@ -45,69 +49,6 @@ function App() {
   } = useSimulations(myUserId);
 
   const activeSim = simulations.find((s) => s.id === activeSimId) || null;
-
-  // Sync Preferences from Firestore
-  useEffect(() => {
-    if (!myUserId || myUserId.startsWith("guest_")) return;
-    
-    const fetchPrefs = async () => {
-      try {
-        const docRef = doc(db, "users", myUserId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().settings) {
-          setUserPreferences(docSnap.data().settings);
-        }
-      } catch(e) {
-        console.error("Error fetching preferences:", e);
-      }
-    };
-    fetchPrefs();
-  }, [myUserId]);
-
-  // Theme Engine
-  useEffect(() => {
-    const root = document.documentElement;
-    const currentTheme = userPreferences?.theme || 'light';
-
-    const applyTheme = (isDark) => {
-      if (isDark) root.classList.add('dark');
-      else root.classList.remove('dark');
-    };
-
-    if (currentTheme === 'system') {
-      const systemQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      applyTheme(systemQuery.matches);
-      const handleSystemChange = (e) => applyTheme(e.matches);
-      systemQuery.addEventListener('change', handleSystemChange);
-      return () => systemQuery.removeEventListener('change', handleSystemChange);
-    } else {
-      applyTheme(currentTheme === 'dark');
-    }
-  }, [userPreferences?.theme]);
-
-  const handleSaveSettings = async (newTheme, newLang) => {
-    const newSettings = { theme: newTheme, lang: newLang };
-    setUserPreferences(newSettings);
-    setIsSettingsOpen(false);
-    localStorage.setItem("theme", newTheme);
-    localStorage.setItem("lang", newLang);
-
-    if (myUserId && !myUserId.startsWith("guest_")) {
-      try {
-        await setDoc(doc(db, "users", myUserId), {
-          settings: newSettings,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.error("บันทึกการตั้งค่าไม่สำเร็จ", err);
-      }
-    }
-  };
-
-  const handleLogout = useCallback(() => {
-    localStorage.clear();
-    window.location.href = "/";
-  }, []);
 
   const onSelectSim = (id) => {
     handleSelectSimulation(id);
@@ -134,64 +75,6 @@ function App() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      localStorage.setItem("currentUserId", user.uid);
-      localStorage.setItem("currentUserName", user.displayName || "User");
-      window.location.reload(); 
-    } catch (error) {
-      console.error("Auth Error (Google):", error.code, error.message);
-      alert("ล็อกอิน Google ไม่สำเร็จ: " + error.message);
-    }
-  };
-
-  const handleEmailLogin = async (email, password) => {
-    try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      const user = result.user;
-      localStorage.setItem("currentUserId", user.uid);
-      localStorage.setItem("currentUserName", user.displayName || user.email.split('@')[0]);
-      window.location.reload();
-    } catch (error) {
-      console.error("Auth Error (Login):", error.code, error.message);
-      if (error.code === 'auth/operation-not-allowed') {
-        alert("ระบบล็อกอินด้วยอีเมลยังไม่ถูกเปิดใช้งาน กรุณาตั้งค่าใน Firebase Console");
-      } else if (error.code === 'auth/invalid-credential') {
-        alert("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
-      } else {
-        alert("เข้าสู่ระบบไม่สำเร็จ: " + error.message);
-      }
-    }
-  };
-
-  const handleEmailSignup = async (email, password) => {
-    try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      const user = result.user;
-      localStorage.setItem("currentUserId", user.uid);
-      localStorage.setItem("currentUserName", user.email.split('@')[0]);
-      window.location.reload();
-    } catch (error) {
-      console.error("Auth Error (Signup):", error.code, error.message);
-      if (error.code === 'auth/operation-not-allowed') {
-        alert("ระบบสมัครสมาชิกด้วยอีเมลยังไม่ถูกเปิดใช้งาน กรุณาตั้งค่าใน Firebase Console");
-      } else if (error.code === 'auth/email-already-in-use') {
-        alert("อีเมลนี้ถูกใช้งานไปแล้ว");
-      } else {
-        alert("สมัครสมาชิกไม่สำเร็จ: " + error.message);
-      }
-    }
-  };
-
-  const handleGuestLogin = () => {
-    localStorage.setItem("currentUserId", "guest_" + Date.now());
-    localStorage.setItem("currentUserName", "Guest User");
-    window.location.reload();
-  };
 
   if (!myUserId) {
     return (

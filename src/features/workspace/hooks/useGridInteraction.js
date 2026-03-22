@@ -1,79 +1,26 @@
 import { useCallback } from 'react';
 
-export const useSimulationLogic = ({
+export const useGridInteraction = ({
   simState,
   setSimState,
+  activeTool,
+  spawnConfig,
+  bodiesRef,
   controlPanelRef,
   matterCanvasRef,
-  bodiesRef,
   pushToHistory,
   showToast,
-  spawnConfig,
-  setIsClearModalOpen,
-  setIsFollowMenuOpen, // 🌟 เพิ่มเข้ามา
-  activeTool,
   selectedObjectId,
   setSelectedObjectId,
   selectedObjectIds,
   setSelectedObjectIds,
   followedObjectId,
   setFollowedObjectId,
+  setIsFollowMenuOpen,
   rulerPoints,
   setRulerPoints,
   handleTeleport
 }) => {
-
-  const handleControlUpdate = useCallback((state) => {
-    setSimState(prev => {
-      if (JSON.stringify(prev) === JSON.stringify(state)) return prev;
-      return state;
-    });
-  }, [setSimState]);
-
-  const updateVectorValue = useCallback((objId, type, index, changes) => {
-    const obj = simState?.objects?.find(o => o.id === objId);
-    if (!obj) return;
-    
-    const values = { ...obj.values };
-    const key = type === 'velocity' ? 'velocities' : 'forces';
-    const arr = [...(values[key] || [])];
-    if (changes.remove) {
-      if (index !== null) {
-        arr.splice(index, 1);
-        values[key] = arr;
-      } else {
-        if (type === 'velocity') { delete values.velocity; delete values.angle; }
-        else { delete values.force; delete values.forceAngle; }
-        values[key] = arr; // Might still need to update forces/velocities array if mixed
-      }
-    } else if (index !== null && arr[index]) {
-      arr[index] = { ...arr[index], ...changes };
-      values[key] = arr;
-    } else if (index === null) {
-      if (type === 'velocity') {
-          if (changes.magnitude !== undefined) values.velocity = changes.magnitude;
-          if (changes.angle !== undefined) values.angle = changes.angle;
-          if (changes.color !== undefined) values.color = changes.color; // Handle potential legacy color
-      } else {
-          if (changes.magnitude !== undefined) values.force = changes.magnitude;
-          if (changes.angle !== undefined) values.forceAngle = changes.angle;
-          if (changes.color !== undefined) values.color = changes.color;
-      }
-      values[key] = arr;
-    }
-
-    if (controlPanelRef.current?.updateObjectValues) {
-      controlPanelRef.current.updateObjectValues(objId, values);
-    }
-  }, [simState, controlPanelRef]);
-
-  const handleClearAllConfirm = useCallback(() => {
-    pushToHistory(simState);
-    if (controlPanelRef.current?.clearAll) {
-      controlPanelRef.current.clearAll();
-    }
-    setIsClearModalOpen(false);
-  }, [pushToHistory, simState, controlPanelRef, setIsClearModalOpen]);
 
   const handleGridClick = useCallback((wx, wy, unitStep = 1, e) => {
     const isShift = e?.shiftKey;
@@ -82,18 +29,15 @@ export const useSimulationLogic = ({
       const fx = snapped ? Math.round(wx / unitStep) * unitStep : wx;
       let fy = snapped ? Math.round(wy / unitStep) * unitStep : wy;
 
-      // Anti-noclip: Clamp spawn altitude so object doesn't start stuck in ground
       const minFy = (spawnConfig.size || 1) / 2;
       if (fy < minFy) fy = minFy;
 
-      // 1. Precise check using Matter.js engine
       const preciseHit = matterCanvasRef.current?.checkCollision(fx, fy, spawnConfig.size, spawnConfig.shape);
       if (preciseHit) {
         showToast('ไม่สามารถเสกวัตถุตรงนี้ได้');
         return;
       }
 
-      // 2. Fallback distance check
       const overlapRadiusBase = 0.52; 
       const requiredRadius = spawnConfig.size * overlapRadiusBase;
 
@@ -138,12 +82,10 @@ export const useSimulationLogic = ({
           const obj = simState.objects.find(o => o.id === vectorHit.objId);
           if (obj) {
             const values = { ...obj.values };
-            // ถ้าลบ 'netResultant' (ผลรวมสุทธิสีม่วง)
             if (vectorHit.index === 'netResultant') {
                const newState = { ...simState, showResultantVector: false };
                setSimState(newState);
             }
-            // ถ้าลบ 'resultant' (ผลรวมแรง/ความเร็ว)
             else if (vectorHit.index === 'resultant') {
                const key = vectorHit.type === 'velocity' ? 'velocities' : 'forces';
                values[key] = [];
@@ -229,13 +171,12 @@ export const useSimulationLogic = ({
       pushToHistory(simState);
       setRulerPoints(prev => [...prev, { x: fx, y: fy }]);
     }
-  }, [activeTool, simState, spawnConfig, bodiesRef, showToast, pushToHistory, controlPanelRef, matterCanvasRef, setIsFollowMenuOpen, selectedObjectId, setSelectedObjectId, selectedObjectIds, setSelectedObjectIds, followedObjectId, setFollowedObjectId, setRulerPoints]);
+  }, [activeTool, simState, spawnConfig, bodiesRef, showToast, pushToHistory, controlPanelRef, matterCanvasRef, setIsFollowMenuOpen, selectedObjectId, setSelectedObjectId, selectedObjectIds, setSelectedObjectIds, followedObjectId, setFollowedObjectId, setRulerPoints, setSimState]);
 
   const handleGridRightClick = useCallback((wx, wy, unitStep = 1) => {
     if (activeTool === 'ruler') {
-      // Find point hit
       let targetIdx = -1;
-      const threshold = 0.5; // world meters
+      const threshold = 0.5; 
       for (let i = 0; i < rulerPoints.length; i++) {
         const p = rulerPoints[i];
         const dist = Math.sqrt((wx - p.x)**2 + (wy - p.y)**2);
@@ -250,12 +191,10 @@ export const useSimulationLogic = ({
         return;
       }
 
-      // Find segment hit
       let segIdx = -1;
       for (let i = 0; i < rulerPoints.length - 1; i++) {
         const p1 = rulerPoints[i];
         const p2 = rulerPoints[i+1];
-        // Dist point to segment
         const A = wx - p1.x;
         const B = wy - p1.y;
         const C = p2.x - p1.x;
@@ -284,28 +223,12 @@ export const useSimulationLogic = ({
       if (segIdx !== -1) {
         setRulerPoints(prev => {
           const next = [...prev];
-          next.splice(segIdx, 2); // Remove both points of the segment
+          next.splice(segIdx, 2); 
           return next;
         });
       }
     }
   }, [activeTool, rulerPoints, setRulerPoints]);
-
-  const onBeforeObjectUpdate = useCallback((objId, changes) => {
-    if (changes.size !== undefined) {
-      const obj = simState?.objects?.find(o => o.id === objId);
-      if (!obj) return true;
-      
-      const pos = bodiesRef.current?.[objId]?.position || obj.position;
-      const collided = matterCanvasRef.current?.checkCollision(pos.x, pos.y, changes.size, obj.shape, objId);
-      
-      if (collided) {
-        showToast('ไม่สามารถเพิ่มขนาดวัตถุได้');
-        return false;
-      }
-    }
-    return true;
-  }, [simState, bodiesRef, matterCanvasRef, showToast]);
 
   const handleGridDoubleClick = useCallback((wx, wy) => {
     if (activeTool === 'cursor') {
@@ -316,13 +239,5 @@ export const useSimulationLogic = ({
     }
   }, [activeTool, handleTeleport, matterCanvasRef]);
 
-  return {
-    handleControlUpdate,
-    updateVectorValue,
-    handleClearAllConfirm,
-    handleGridClick,
-    handleGridRightClick,
-    handleGridDoubleClick,
-    onBeforeObjectUpdate
-  };
+  return { handleGridClick, handleGridRightClick, handleGridDoubleClick };
 };
