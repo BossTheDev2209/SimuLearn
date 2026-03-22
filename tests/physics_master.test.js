@@ -8,7 +8,7 @@ import {
   worldToMatter,
   matterToWorld,
   PIXELS_PER_METER as PPM,
-} from "../src/components/SimulationWorkspace/MatterCanvas/PhysicsEngine";
+} from "../src/features/workspace/physics/PhysicsEngine";
 
 // ─────────────────────────────────────────────
 // HELPERS

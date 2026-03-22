@@ -1,22 +1,22 @@
 import React, { useState, useRef, useCallback, useEffect, memo, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import ControlPanel from '../ControlPanel/ControlPanel';
-import InteractiveGrid from './InteractiveGrid/index';
-import MatterCanvas from './MatterCanvas/index';
+import ControlPanel from '../control-panel/ControlPanel';
+import InteractiveGrid from '../../components/SimulationWorkspace/InteractiveGrid/index';
+import MatterCanvas from '../../components/SimulationWorkspace/MatterCanvas/index';
 
 // UI Components
-import { Toolbar } from './UI/Toolbar';
-import { SpawnOverlay } from './UI/SpawnOverlay';
-import { FollowMenu } from './UI/FollowMenu';
-import { VectorTooltip } from './UI/VectorTooltip';
-import { TrackingSystem } from './UI/TrackingSystem';
-import { RulerSystem } from './UI/RulerSystem';
-import { ClearModal } from './UI/ClearModal';
-import Timebar from './Timebar';
+import { Toolbar } from './ui/Toolbar';
+import { SpawnOverlay } from './ui/SpawnOverlay';
+import { FollowMenu } from './ui/FollowMenu';
+import { VectorTooltip } from './ui/VectorTooltip';
+import { TrackingSystem } from './ui/TrackingSystem';
+import { RulerSystem } from './ui/RulerSystem';
+import { ClearModal } from './ui/ClearModal';
+import Timebar from './ui/Timebar';
 
 // Hooks
-import { useWorkspaceState } from '../../hooks/useWorkspaceState';
+import { useWorkspaceState } from './hooks/useWorkspaceState';
 import { useSimulationHistory } from './hooks/useSimulationHistory';
 import { useTimeManagement } from './hooks/useTimeManagement';
 import { useSimulationLogic } from './hooks/useSimulationLogic';

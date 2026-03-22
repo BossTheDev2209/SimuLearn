@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, memo } from 'react';
 import Matter from 'matter-js';
-import { PIXELS_PER_METER, renderObjectVectors, drawArrow } from './VectorRenderer';
-import { createPhysicsEngine, createGround, updatePhysics, worldToMatter, matterToWorld, computeGravityY } from './PhysicsEngine';
+import { PIXELS_PER_METER, renderObjectVectors, drawArrow } from '../../../features/workspace/physics/VectorRenderer';
+import { createPhysicsEngine, createGround, updatePhysics, worldToMatter, matterToWorld, computeGravityY } from '../../../features/workspace/physics/PhysicsEngine';
 import { formatScientific } from '../../../utils/format';
 
 

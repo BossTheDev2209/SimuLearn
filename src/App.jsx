@@ -4,7 +4,7 @@ import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, create
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import LoadingSimulation from './components/LoadingSimulation';
 import Sidebar from './components/Sidebar';
-import SimulationWorkspace from './components/SimulationWorkspace/SimulationWorkspace.jsx';
+import SimulationWorkspace from './features/workspace/SimulationWorkspace.jsx';
 import ChatArea from './components/ChatArea';
 import SearchModal from './components/SearchModal';
 import SettingsModal from './components/SettingsModal';
