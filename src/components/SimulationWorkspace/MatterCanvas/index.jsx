@@ -1,13 +1,9 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, memo } from 'react';
 import Matter from 'matter-js';
-import { PIXELS_PER_METER } from '../../../features/workspace/physics/VectorRenderer';
-import { createPhysicsEngine, createGround, updatePhysics, worldToMatter, matterToWorld, computeGravityY } from '../../../features/workspace/physics/PhysicsEngine';
-import { formatScientific } from '../../../utils/format';
 import { useCanvasInteractions } from './hooks/useCanvasInteractions';
-import { renderCanvas } from './utils/renderCanvas';
-
-
-
+import { worldToMatter, matterToWorld, computeGravityY } from '../../../features/workspace/physics/PhysicsEngine';
+import { PIXELS_PER_METER } from '../../../features/workspace/physics/VectorRenderer';
+import { useSimulationLoop } from './hooks/useSimulationLoop';
 
 const MatterCanvas = forwardRef(({ 
   size, offset, zoom, unitStep, simState, onPhysicsChange, 
@@ -21,7 +17,7 @@ const MatterCanvas = forwardRef(({
   const bodyMap = useRef(new Map());
   const mouseRef = useRef({ x: -1000, y: -1000 });
   const drawingVectorRef = useRef(null);
-  const trajectoriesRef = useRef(new Map()); // id -> { color, points: [] }
+  const trajectoriesRef = useRef(new Map()); 
   
   const [engineResetToken, setEngineResetToken] = useState(0);
   const [simSyncToken, setSimSyncToken] = useState(0);
@@ -40,12 +36,13 @@ const MatterCanvas = forwardRef(({
       followedObjectId, selectedObjectId, selectedObjectIds, onPhysicsChange]);
 
   const interactions = useCanvasInteractions({
-    simState,
-    engineRef,
-    bodyMap,
-    drawingVectorRef,
-    controlPanelRef,
-    selectedObjectId
+    simState, engineRef, bodyMap, drawingVectorRef, controlPanelRef, selectedObjectId
+  });
+
+  useSimulationLoop({
+    canvasRef, engineRef, bodyMap, trajectoriesRef, timeStateRef,
+    loopPropsRef, mouseRef, drawingVectorRef, setIsPlaying, onCrash,
+    engineResetToken
   });
 
   // ── Imperative API ───────────────────────────────────────────────────────
@@ -64,6 +61,7 @@ const MatterCanvas = forwardRef(({
   // Track mouse
   useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const handleMouseMove = (e) => {
       const rect = canvas.parentElement.getBoundingClientRect();
       mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -71,118 +69,6 @@ const MatterCanvas = forwardRef(({
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
-
-  // ── Main Render Loop ─────────────────────────────────────────────────────
-  useEffect(() => {
-    const engine = createPhysicsEngine();
-    engineRef.current = engine;
-    bodyMap.current.clear();
-    trajectoriesRef.current.clear();
-    Matter.Composite.add(engine.world, createGround());
-    setSimSyncToken(v => v + 1);
-
-    let raf;
-    let lastTime = performance.now();
-    let accumulator = 0;
-    const FIXED_DELTA_MS = 1000 / 60;
-    
-    // To support smooth interpolation
-    const prevStates = new Map(); // id -> { x, y, angle }
-    const currentStates = new Map(); // id -> { x, y, angle }
-
-    const loop = (now) => {
-      const delta = Math.min(now - lastTime, 100);
-      lastTime = now;
-
-      if (timeStateRef.current?.isPlaying) {
-        accumulator += delta * (timeStateRef.current.timeScale || 1);
-        
-        while (accumulator >= FIXED_DELTA_MS) {
-          // Sync current to prev before update
-          for (const [id, body] of bodyMap.current) {
-            prevStates.set(id, { x: body.position.x, y: body.position.y, angle: body.angle });
-          }
-
-          const status = updatePhysics(engine, FIXED_DELTA_MS, loopPropsRef.current.simState, bodyMap.current, timeStateRef.current, setIsPlaying);
-          
-          if (status === 'crash') {
-            timeStateRef.current.isPlaying = false;
-            setIsPlaying(false);
-            onCrash?.();
-            accumulator = 0;
-            break;
-          }
-
-          // Update current states
-          for (const [id, body] of bodyMap.current) {
-            currentStates.set(id, { x: body.position.x, y: body.position.y, angle: body.angle });
-          }
-
-          timeStateRef.current.totalPhysicsTicks = (timeStateRef.current.totalPhysicsTicks || 0) + 1;
-          // Freeze UI timer if physics engine returns 'settling' or 'settled' so we don't count the hold period
-          if (status !== 'settling' && status !== 'settled') {
-             timeStateRef.current.time = timeStateRef.current.totalPhysicsTicks * (FIXED_DELTA_MS / 1000);
-          }
-          accumulator -= FIXED_DELTA_MS;
-
-          // Track Trajectories
-          if (loopPropsRef.current.simState?.showTrajectory) {
-            for (const [id, body] of bodyMap.current.entries()) {
-              if (body.label === 'ground') continue;
-              let traj = trajectoriesRef.current.get(id);
-              if (!traj) {
-                const obj = loopPropsRef.current.simState.objects?.find(o => o.id === id);
-                traj = { color: obj?.color || '#FFB65A', points: [] };
-                trajectoriesRef.current.set(id, traj);
-              }
-              traj.points.push({ ...matterToWorld(body.position.x, body.position.y), alpha: 0.8 });
-              if (traj.points.length > 200) traj.points.shift();
-            }
-          }
-        }
-      }
-
-      // Continuous Trajectory Decay (Happens even when paused)
-      trajectoriesRef.current.forEach((traj) => {
-        traj.points.forEach(p => { p.alpha -= 0.005; }); // Decay alpha
-        traj.points = traj.points.filter(p => p.alpha > 0); // Remove faded points
-      });
-
-      // ✅ ส่ง world-meter bodies กลับให้ useCameraEngine
-      if (loopPropsRef.current.onPhysicsChange) {
-        const worldBodies = {};
-        for (const [id, body] of bodyMap.current) {
-          worldBodies[id] = { position: matterToWorld(body.position.x, body.position.y) };
-        }
-        loopPropsRef.current.onPhysicsChange(worldBodies, timeStateRef.current?.isPlaying);
-      }
-
-      // ── Draw ────────────────────────────────────────────────────────────
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext('2d');
-      if (!ctx) { raf = requestAnimationFrame(loop); return; }
-
-      renderCanvas({
-        ctx,
-        loopPropsRef,
-        timeStateRef,
-        accumulator,
-        FIXED_DELTA_MS,
-        engineRef,
-        bodyMap,
-        prevStates,
-        currentStates,
-        trajectoriesRef,
-        mouseRef,
-        drawingVectorRef
-      });
-
-      raf = requestAnimationFrame(loop);
-    };
-
-    raf = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(raf); Matter.Engine.clear(engine); Matter.Composite.clear(engine.world, false); };
-  }, [engineResetToken]);
 
   // ── Sync simState → engine ───────────────────────────────────────────────
   useEffect(() => {
@@ -274,7 +160,7 @@ const MatterCanvas = forwardRef(({
         Matter.Body.setVelocity(body, { x: vxSum, y: -vySum });
       }
     });
-  }, [simState, simSyncToken]);
+  }, [simState, simSyncToken, engineResetToken]);
 
   return <canvas ref={canvasRef} width={size.w} height={size.h} className="absolute inset-0 pointer-events-none z-10" />;
 });

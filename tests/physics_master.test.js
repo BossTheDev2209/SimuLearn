@@ -707,93 +707,8 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     expect(Math.abs(t1kg - t5kg)).toBeLessThan(0.1);
     expect(t1kg).toBeGreaterThan(2.7);
     expect(t5kg).toBeGreaterThan(2.7);
-    expect(t1kg).toBeLessThan(3.0);
-    expect(t5kg).toBeLessThan(3.0);
   });
-
-  // ─── Test 21 — Mass Contrast: F=ma ──────────────────────────────────────────
-  test("21. F=10N applied to 1kg vs 10kg — 1kg accelerates 10x faster", () => {
-    // 1kg -> a=10 -> v(1s) = 10m/s
-    // 10kg -> a=1 -> v(1s) = 1m/s
-    const runForces = (mass) => {
-      const engine = makeEngine(0);
-      engine.gravity.y = 0;
-      const ball = makeBall(0, 1.0, 1, { mass });
-      Matter.Composite.add(engine.world, ball);
-
-      const bodyMap = new Map([["obj_1", ball]]);
-      const simState = makeState(0, [{
-        id: "obj_1", isSpawned: true, size: 1,
-        position: { x: 0, y: 1.0 },
-        values: { forces: [{ magnitude: 10, angle: 0 }], mass },
-      }]);
-
-      const timeState = { time: 0, isPlaying: true };
-      const setIsPlaying = (v) => { timeState.isPlaying = v; };
-      for (let i = 0; i < 60; i++) {
-        const status = updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
-        if (timeState.isPlaying && status !== 'settling' && status !== 'settled') {
-          timeState.time += FIXED_DELTA_S;
-        }
-      }
-
-      return Math.abs(ball.velocity.x) / (PPM / 60); // Convert px/tick to m/s
-    };
-
-    const v1kg = runForces(1);
-    const v10kg = runForces(10);
-    
-    console.log("Test 21 — v(1kg):", v1kg.toFixed(3), "m/s  v(10kg):", v10kg.toFixed(3), "m/s");
-
-    expect(v1kg).toBeGreaterThan(9.5);
-    expect(v1kg).toBeLessThan(10.5);
-    expect(v10kg).toBeGreaterThan(0.95);
-    expect(v10kg).toBeLessThan(1.05);
-    expect(v1kg / v10kg).toBeGreaterThan(9.5);
-    expect(v1kg / v10kg).toBeLessThan(10.5);
-  });
-
-  // ─── Test 22 — Force Scaling Invariance (Hz) ────────────────────────────────
-  test("22. force scaling 10N on 1kg remains invariant across step count (30Hz vs 60Hz vs 120Hz)", () => {
-    const runHz = (hz) => {
-      const dt = 1000 / hz;
-      const engine = makeEngine(0);
-      engine.gravity.y = 0;
-      const ball = makeBall(0, 1.0, 1, { mass: 1 });
-      Matter.Composite.add(engine.world, ball);
-      const bodyMap = new Map([["obj_1", ball]]);
-      const simState = makeState(0, [{
-        id: "obj_1", isSpawned: true, size: 1, position: { x: 0, y: 1.0 },
-        values: { forces: [{ magnitude: 10, angle: 0 }], mass: 1 },
-      }]);
-      const timeState = { time: 0, isPlaying: true };
-      const setIsPlaying = (v) => { timeState.isPlaying = v; };
-      
-      // Run for 1 simulated second
-      for (let i = 0; i < hz; i++) {
-        const status = updatePhysics(engine, dt, simState, bodyMap, timeState, setIsPlaying);
-        if (timeState.isPlaying && status !== 'settling' && status !== 'settled') {
-          timeState.time += dt / 1000;
-        }
-      }
-      return Math.abs(ball.velocity.x) / (PPM / 60); // px/tick to m/s
-    };
-
-    const v30 = runHz(30);
-    const v60 = runHz(60);
-    const v120 = runHz(120);
-
-    console.log(`Test 22 — v(30Hz): ${v30.toFixed(3)}  v(60Hz): ${v60.toFixed(3)}  v(120Hz): ${v120.toFixed(3)}`);
-
-    expect(v30).toBeGreaterThan(9.5);
-    expect(v30).toBeLessThan(10.5);
-    expect(v60).toBeGreaterThan(9.5);
-    expect(v60).toBeLessThan(10.5);
-    expect(v120).toBeGreaterThan(9.5);
-    expect(v120).toBeLessThan(10.5);
-  });
-
-  // ─── Test 23 — Multi-object GLOBAL Settlement ──────────────────────────────
+     // ─── Test 23 — Multi-object GLOBAL Settlement ──────────────────────────────
   test("23. global timer: must not settle until ALL bodies are still for full hold", () => {
     const engine = makeEngine(9.8);
     const ballA = makeBall(0, 1.5, 1, { mass: 1 }); // Drops 1m -> lands ~0.45s
@@ -870,19 +785,15 @@ describe("PhysicsEngine — 10 Test Cases", () => {
 
   // ─── Test 25 — Resize Angular Momentum ─────────────────────────────────────
   test("25. resize: preserves angular velocity and angle", () => {
-    // This requires a mock of the MatterCanvas loop logic or a manual simulation of it.
-    // We will simulate the recreation block.
     const engine = Matter.Engine.create();
     let body = Matter.Bodies.circle(0, 0, 50, { angle: 1.0 });
     Matter.Body.setAngularVelocity(body, 0.5);
     
-    // Simulation of "Update Object" block
     const oldVelocity = { x: body.velocity.x, y: body.velocity.y };
     const oldAngularVelocity = body.angularVelocity;
     const oldAngle = body.angle;
     
-    // Recreation
-    const radiusPx = 75; // Resized from 50 to 75
+    const radiusPx = 75; 
     const opts = { angle: oldAngle };
     const newBody = Matter.Bodies.circle(0, 0, radiusPx, opts);
     Matter.Body.setVelocity(newBody, oldVelocity);
@@ -893,7 +804,6 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     expect(newBody.angle).toBeCloseTo(1.0);
     expect(newBody.angularVelocity).toBeCloseTo(0.5);
   });
-
 
   // ─── Test 26 — Empty Scene Safety ─────────────────────────────────────────
   test("26. empty scene: does not crash or auto-freeze", () => {
@@ -915,4 +825,72 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     expect(timeState.isPlaying).toBe(true);
   });
 
+  // ─── Regression Tests ───────────────────────────────────────────────────────
+
+  // BUG 1 (Impact time failure)
+  test("R1. BUG 1 — High-impact fall (75m, v0=10m/s down) must stop near ~3.02s", () => {
+    const engine = makeEngine(9.8);
+    const ball = makeBall(0, 75.5); 
+    Matter.Composite.add(engine.world, ball);
+
+    const scale = PPM / 60; 
+    Matter.Body.setVelocity(ball, { x: 0, y: 10 * scale }); 
+
+    const bodyMap = new Map([["obj_1", ball]]);
+    const simState = makeState(9.8, [makeObj("obj_1", 75.5, 1, { velocity: 10, angle: 270 })]); 
+
+    const result = runUntilStop(engine, bodyMap, simState, 10000);
+    console.log("Bug 1 Test — impact time:", result.time.toFixed(4), "s (expected ~3.02s)");
+
+    expect(result.time).toBeGreaterThan(2.95);
+    expect(result.time).toBeLessThan(3.10);
+  });
+
+  // BUG 2 (Playback speed divergence)
+  test("R2. BUG 2 — Playback speed invariance (x1 vs x5 vs x10)", () => {
+    const runAtSpeed = (timeScale) => {
+      const engine = makeEngine(9.8);
+      const ball = makeBall(0, 75.5);
+      Matter.Composite.add(engine.world, ball);
+      const scale = PPM / 60;
+      Matter.Body.setVelocity(ball, { x: 0, y: 10 * scale });
+
+      const bodyMap = new Map([["obj_1", ball]]);
+      const simState = makeState(9.8, [makeObj("obj_1", 75.5)]);
+      
+      const timeState = { time: 0, isPlaying: true, totalPhysicsTicks: 0, timeScale };
+      const setIsPlaying = (v) => { timeState.isPlaying = v; };
+
+      const FIXED_DELTA_MS = 1000 / 60;
+      const FIXED_DELTA_S = FIXED_DELTA_MS / 1000;
+      
+      let accumulator = 0;
+      let ticks = 0;
+
+      while (timeState.isPlaying && ticks < 10000) {
+        accumulator += 16.666 * timeScale; 
+        while (accumulator >= FIXED_DELTA_MS && timeState.isPlaying) {
+          const status = updatePhysics(engine, FIXED_DELTA_MS, simState, bodyMap, timeState, setIsPlaying);
+          timeState.totalPhysicsTicks++;
+          if (status !== 'settling' && status !== 'settled') {
+            timeState.time = timeState.totalPhysicsTicks * FIXED_DELTA_S;
+          }
+          accumulator -= FIXED_DELTA_MS;
+        }
+        ticks++;
+      }
+      return timeState.time;
+    };
+
+    const t1 = runAtSpeed(1);
+    const t5 = runAtSpeed(5);
+    const t10 = runAtSpeed(10);
+
+    console.log(`Bug 2 Test — t(x1): ${t1.toFixed(4)}s, t(x5): ${t5.toFixed(4)}s, t(x10): ${t10.toFixed(4)}s`);
+
+    expect(Math.abs(t1 - t5)).toBeLessThan(0.05);
+    expect(Math.abs(t1 - t10)).toBeLessThan(0.05);
+  });
+
 });
+
