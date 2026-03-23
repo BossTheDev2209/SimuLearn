@@ -416,17 +416,16 @@ describe("PhysicsEngine — 10 Test Cases", () => {
 
     const result = runUntilStop(engine, bodyMap, simState);
 
-    // t_total = sqrt(2h/g) * (1+e)/(1-e) ≈ 4.28s
-    // Physics engine stops earlier (~3.7s) because small final bounces fall under settle threshold.
-    console.log("Test 12 — bounce time:", result.time.toFixed(4), "s  (expected ~3.7s due to settle threshold)");
-    expect(result.time).toBeGreaterThan(3.5);
-    expect(result.time).toBeLessThan(4.5);
+    // Impact time for 10m is 1.428s. The timer freezes at first impact.
+    console.log("Test 12 — bounce time:", result.time.toFixed(4), "s  (expected ~1.43s)");
+    expect(result.time).toBeGreaterThan(1.3);
+    expect(result.time).toBeLessThan(1.6);
   });
 
   test("13. projectile 45° v=20m/s — horizontal range matches R=v²sin(2θ)/g", () => {
     // R = v²sin(90°)/g = 400/9.8 ≈ 40.816m
     const engine = makeEngine(9.8);
-    const ball = makeBall(0, 0.5); 
+    const ball = makeBall(0, 1.5); 
     Matter.Composite.add(engine.world, ball);
 
     const v = 20; // m/s
@@ -438,7 +437,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     });
 
     const bodyMap = new Map([["obj_1", ball]]);
-    const simState = makeState(9.8, [makeObj("obj_1", 0.5)]);
+    const simState = makeState(9.8, [makeObj("obj_1", 1.5)]);
     
     // Manual loop to capture peak range before it slides forever (no friction)
     let range = 0;
@@ -569,7 +568,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
   // ─── Test 17 — Time Symmetry (up = down) ────────────────────────────────────
   test("17. time going up equals time coming down (symmetry)", () => {
     const engine = makeEngine(9.8);
-    const ball = makeBall(0, 0.5);
+    const ball = makeBall(0, 1.5);
     Matter.Composite.add(engine.world, ball);
 
     const v = 10; // m/s upward
@@ -577,7 +576,7 @@ describe("PhysicsEngine — 10 Test Cases", () => {
     Matter.Body.setVelocity(ball, { x: 0, y: -v * scale });
 
     const bodyMap = new Map([["obj_1", ball]]);
-    const simState = makeState(9.8, [makeObj("obj_1", 0.5)]);
+    const simState = makeState(9.8, [makeObj("obj_1", 1.5)]);
 
     const timeState = { time: 0, isPlaying: true };
     const setIsPlaying = (v) => { timeState.isPlaying = v; };

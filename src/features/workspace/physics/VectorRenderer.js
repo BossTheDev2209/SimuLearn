@@ -57,13 +57,13 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
 
   // รวบรวม velocities
   const vels = [...(obj.values?.velocities || [])];
-  if (obj.values?.velocity != null) {
+  if (obj.values?.velocity != null && obj.values.velocity > 0) {
     vels.push({ magnitude: obj.values.velocity, angle: obj.values.angle || 0 });
   }
 
   // รวบรวม forces
   const forces = [...(obj.values?.forces || [])];
-  if (obj.values?.force != null) {
+  if (obj.values?.force != null && obj.values.force > 0) {
     forces.push({ magnitude: obj.values.force, angle: obj.values.forceAngle || 0 });
   }
 
@@ -75,6 +75,7 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
 
   // ── A. Velocity (Blue) ──────────────────────────────────────────────────
   vels.forEach(v => {
+    if (!v.magnitude || v.magnitude <= 0) return;
     const angleRad = (v.angle * Math.PI) / 180;
     const vLen = getVisualLength(v.magnitude);
     const ex = origin.x + vLen * Math.cos(angleRad);
@@ -100,6 +101,7 @@ export const renderObjectVectors = (ctx, toScreen, obj, body, showResultantVecto
 
   // ── B. Force (Red) ──────────────────────────────────────────────────────
   forces.forEach(f => {
+    if (!f.magnitude || f.magnitude <= 0) return;
     const angleRad = (f.angle * Math.PI) / 180;
     const fLen = getVisualLength(f.magnitude);
     const ex = origin.x + fLen * Math.cos(angleRad);
